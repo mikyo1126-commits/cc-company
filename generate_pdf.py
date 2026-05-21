@@ -207,19 +207,26 @@ class PDFMaker:
 
         time_label = "🌅 朝8時" if is_morning else "🌙 夜21時"
 
+        # Extract hashtag line from raw body before wrapping
+        hash_raw = ""
+        body_clean = []
+        for line in body.split("\n"):
+            if line.strip().startswith("#") and not hash_raw:
+                hash_raw = line.strip()
+            else:
+                body_clean.append(line)
+        body_no_hash = "\n".join(body_clean)
+
         # Pre-calculate height needed
-        body_lines = self._wrap_text(body, 8.5, TEXT_W - 8*mm)
+        body_lines = self._wrap_text(body_no_hash, 8.5, TEXT_W - 8*mm)
         n_body = len(body_lines)
-        # Find hashtag line index
-        hash_idx = None
-        for i, l in enumerate(body_lines):
-            if l.startswith("#"):
-                hash_idx = i
-                break
+
+        hash_tag_lines = self._wrap_text(hash_raw, 8, TEXT_W - 14*mm) if hash_raw else []
+        hash_box_h = (len(hash_tag_lines) * 5*mm + 4*mm + 3*mm) if hash_tag_lines else 0
 
         header_h = 10*mm
         body_h = n_body * 5.2*mm + 6*mm
-        total = header_h + body_h + 8*mm
+        total = header_h + body_h + hash_box_h + 8*mm
 
         self._check_space(total)
 
@@ -260,19 +267,34 @@ class PDFMaker:
         self.c.line(MARGIN_L + 4*mm, ty + 1.5*mm, MARGIN_L + TEXT_W - 4*mm, ty + 1.5*mm)
         ty -= 3*mm
 
-        # Body text
+        # Body text (hashtag lines excluded)
         self.c.setFont("JA", 8.5)
-        for i, line in enumerate(body_lines):
-            if ty < box_y + 2*mm:
+        for line in body_lines:
+            if ty < box_y + hash_box_h + 2*mm:
                 break
-            if line.startswith("#"):
-                self.c.setFillColor(COL_HASH)
-            elif line.startswith("【") or line.startswith("■"):
+            if line.startswith("【") or line.startswith("■"):
                 self.c.setFillColor(hdr_col)
             else:
                 self.c.setFillColor(COL_TITLE)
             self.c.drawString(MARGIN_L + 4*mm, ty, line)
             ty -= 5.2*mm
+
+        # Hashtag box (visually isolated for easy copy)
+        if hash_tag_lines:
+            inner_box_h = len(hash_tag_lines) * 5*mm + 4*mm
+            tag_y = box_y + 3*mm
+            self.c.setStrokeColor(HexColor("#BBDEFB"))
+            self.c.setLineWidth(0.4)
+            self.c.line(MARGIN_L + 4*mm, tag_y + inner_box_h + 1*mm,
+                        MARGIN_L + TEXT_W - 4*mm, tag_y + inner_box_h + 1*mm)
+            self.c.setFillColor(HexColor("#E3F2FD"))
+            self.c.roundRect(MARGIN_L + 4*mm, tag_y, TEXT_W - 8*mm, inner_box_h, 2*mm, fill=1, stroke=0)
+            self.c.setFillColor(COL_HASH)
+            self.c.setFont("JA", 8)
+            text_y = tag_y + inner_box_h - 4.5*mm
+            for tl in hash_tag_lines:
+                self.c.drawString(MARGIN_L + 7*mm, text_y, tl)
+                text_y -= 5*mm
 
         self.y = box_y - 5*mm
 
@@ -370,3 +392,16 @@ if __name__ == "__main__":
     maker.page_number()
     maker.save()
     print(f"PDF saved: {OUTPUT}")
+
+    # Generate hashtag-only text file for easy copy-paste
+    HASHTAG_OUT = "/home/user/cc-company/marketing/content-plan/hajime-x-hashtags.txt"
+    with open(HASHTAG_OUT, "w", encoding="utf-8") as f:
+        f.write("# はじめさん X投稿 ハッシュタグ一覧（28本）\n\n")
+        for day, is_morning, title, meta, body, is_aff in sorted(posts, key=lambda x: (x[0], not x[1])):
+            icon = "🌅" if is_morning else "🌙"
+            time_str = "朝" if is_morning else "夜"
+            for line in body.split("\n"):
+                if line.strip().startswith("#"):
+                    f.write(f"Day{day:02d} {icon}{time_str}: {line.strip()}\n")
+                    break
+    print(f"Hashtags saved: {HASHTAG_OUT}")
