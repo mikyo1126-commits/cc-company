@@ -402,13 +402,13 @@ class PDF:
                 PAD    = 3*mm
 
                 ch = (PAD
-                      + 5.5*mm                        # "問題" label + gap
+                      + 8*mm                          # "問題" label + gap
                       + len(p_lines) * LINE_P + PAD
                       + 1*mm                          # divider
-                      + 5.5*mm                        # "改善策" label + gap
+                      + 8*mm                          # "改善策" label + gap
                       + len(a_lines) * LINE_A + PAD
                       + 1*mm                          # divider
-                      + 5*mm                          # "根拠" label + gap
+                      + 7.5*mm                        # "根拠" label + gap
                       + len(r_lines) * LINE_R + PAD)
 
                 self._ensure(ch + card_gap)
@@ -435,7 +435,7 @@ class PDF:
                 ty = ct - PAD
                 c.setFillColor(GRAY); c.setFont("JA", 6.5)
                 c.drawString(ML + 24*mm, ty - 4.5*mm, "問題")
-                ty -= 5.5*mm
+                ty -= 8*mm
                 c.setFillColor(NAVY); c.setFont("JA", 7.5)
                 for ln in p_lines:
                     c.drawString(ML + 5*mm, ty, ln)
@@ -450,7 +450,7 @@ class PDF:
                 # ── Action ──
                 c.setFillColor(pri_col); c.setFont("JA", 7)
                 c.drawString(ML + 5*mm, ty - 4.5*mm, "→ 改善策")
-                ty -= 5.5*mm
+                ty -= 8*mm
                 c.setFillColor(pri_col); c.setFont("JA", 8)
                 for ln in a_lines:
                     c.drawString(ML + 5*mm, ty, ln)
@@ -465,7 +465,7 @@ class PDF:
                 # ── Reason ──
                 c.setFillColor(GRAY); c.setFont("JA", 6.5)
                 c.drawString(ML + 5*mm, ty - 4*mm, "根拠")
-                ty -= 5*mm
+                ty -= 7.5*mm
                 c.setFillColor(HexColor("#4A5568")); c.setFont("JA", 7)
                 for ln in r_lines:
                     c.drawString(ML + 5*mm, ty, ln)
