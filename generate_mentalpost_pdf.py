@@ -217,28 +217,36 @@ class MentalPostPDF:
 
         # Pre-calculate heights
         BODY_FS   = 8.5
-        HDR_FS    = 9.5
         SUB_FS    = 8.0
         PAD       = 4*mm
         INNER_W   = TW - 2*PAD
 
-        def count_h(lines, fs, extra_gap=1.2):
-            h = 0
-            for ln in lines:
-                if ln == "":
-                    h += fs * 0.6 * extra_gap
-                    continue
-                wrapped = _wrap(c, ln, fs, INNER_W - 4*mm)
-                h += len(wrapped) * fs * extra_gap
-            return h
+        # Subtitle height (exact, matching drawing loop)
+        sub_lines_pre = _wrap(c, subtitle, SUB_FS, INNER_W - 4*mm)
+        sub_h = len(sub_lines_pre) * SUB_FS * 1.4 + 1*mm
 
-        body_h   = count_h(body_only, BODY_FS)
-        hash_box = 8*mm if hash_text else 0
-        total    = (6*mm + 5.5*mm + 5*mm +   # code + subtitle + source
-                    4*mm +                     # divider gap
-                    body_h +                   # body
-                    3*mm + hash_box +           # hashtag area
-                    6*mm)                       # bottom pad
+        # Body height (exact same widths and spacing as drawing loop)
+        def _line_h(ln):
+            if ln == "":
+                return BODY_FS * 0.7
+            is_bullet   = ln.startswith("■")
+            is_heading  = ln.startswith("【") and ln.endswith("】")
+            x_off = 8*mm if is_bullet else 5*mm
+            fs    = BODY_FS
+            gap   = BODY_FS * 1.4 if is_heading else BODY_FS * 1.25
+            max_w = INNER_W - (x_off - 5*mm + 2*mm)
+            wrapped = _wrap(c, ln, fs, max_w)
+            return len(wrapped) * gap
+
+        body_h = sum(_line_h(ln) for ln in body_only)
+
+        # Hash section: divider-gap + line-gap + box
+        hash_section = (2*mm + 2*mm + 6*mm) if hash_text else 2*mm
+
+        # Header: pad + badge + tag + subtitle + source + divider
+        header_h = PAD + 6.5*mm + 5.5*mm + sub_h + 5.5*mm + 3*mm
+
+        total = header_h + body_h + hash_section + 6*mm  # 6mm bottom pad
 
         self._check(total + 6*mm)
         box_y = self.y - total
