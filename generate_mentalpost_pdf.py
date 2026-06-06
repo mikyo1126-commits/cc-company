@@ -243,8 +243,8 @@ class MentalPostPDF:
         # Hash section: divider-gap + line-gap + box
         hash_section = (2*mm + 2*mm + 6*mm) if hash_text else 2*mm
 
-        # Header: pad + badge + tag + subtitle + source + divider
-        header_h = PAD + 6.5*mm + 5.5*mm + sub_h + 5.5*mm + 3*mm
+        # Header: pad + badge + tag + subtitle + divider
+        header_h = PAD + 6.5*mm + 5.5*mm + sub_h + 3*mm
 
         total = header_h + body_h + hash_section + 6*mm  # 6mm bottom pad
 
@@ -290,11 +290,6 @@ class MentalPostPDF:
             c.drawString(ML + 5*mm, ty - SUB_FS, ln)
             ty -= SUB_FS * 1.4
         ty -= 1*mm
-
-        # Source line
-        c.setFillColor(COL_SOURCE); c.setFont("JA", 6.5)
-        c.drawString(ML + 5*mm, ty - 6.5, f"参考: {source}")
-        ty -= 5.5*mm
 
         # Divider
         c.setStrokeColor(COL_DIVIDER); c.setLineWidth(0.3)
