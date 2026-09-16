@@ -1,8 +1,7 @@
-name: "@hajime_cp 日次X投稿ワークフロー"
+name: "@hajime_cp X post workflow"
 
 on:
   schedule:
-    # 毎日 05:00 JST（= UTC 20:00 前日）
     - cron: '0 20 * * *'
   workflow_dispatch:
 
@@ -11,208 +10,157 @@ env:
 
 jobs:
   x-daily-post:
-    name: 日次投稿ワークフロー
+    name: daily-post
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
-      contents: write   # 下書きをリポジトリにコミットするため
-      issues: write     # トークン期限切れ時にIssueで通知するため
+      contents: write
+      issues: write
 
     steps:
-      # ──────────────────────────────────────────────────
-      # 0. セットアップ
-      # ──────────────────────────────────────────────────
-      - name: リポジトリをチェックアウト
+      - name: checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Python セットアップ
+      - name: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 依存ライブラリをインストール
+      - name: install-deps
         run: pip install -r requirements.txt
 
-      - name: Node.js セットアップ（Claude Code CLI用）
+      - name: setup-node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Claude Code CLI をインストール
+      - name: install-claude-cli
         run: npm install -g @anthropic-ai/claude-code@latest
 
-      # ──────────────────────────────────────────────────
-      # 1. OAuthトークン検証（期限切れ・未設定を即座に検知）
-      # ──────────────────────────────────────────────────
-      - name: OAuthトークンを検証
+      - name: validate-token
         id: token_check
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "::error title=認証エラー::CLAUDE_CODE_OAUTH_TOKEN が GitHub Secrets に未設定です。"
-            echo "::error::設定方法 → リポジトリの Settings > Secrets and variables > Actions > New repository secret"
-            echo "::error::シークレット名: CLAUDE_CODE_OAUTH_TOKEN"
-            echo "::error::値の取得方法: ローカルで 'claude setup-token' を実行"
-            echo "::error::⚠️ ANTHROPIC_API_KEY は使用しません"
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set in GitHub Secrets"
             exit 1
           fi
-          echo "::notice::OAuthトークンを確認しました"
+          echo "::notice::OAuth token validated"
 
-      # ──────────────────────────────────────────────────
-      # 2. Step 1: 収集計画を生成（Python スクリプト）
-      # ──────────────────────────────────────────────────
-      - name: "[Step 1] 競合・トレンド収集計画を生成"
+      - name: step1-collect-plan
         id: step1
         run: |
           DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           echo "DATE=$DATE" >> $GITHUB_ENV
           python3 workflow/01_collect_trends.py --date "$DATE"
 
-      # ──────────────────────────────────────────────────
-      # 3. Step 2: Claude が競合分析・トレンド収集を実行
-      # ──────────────────────────────────────────────────
-      - name: "[Step 2] 競合分析・トレンド収集"
+      - name: step2-analyze-trends
         id: step2
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           DRAFT_DIR="marketing/content-plan/drafts/$DATE"
-
-          # プロンプトを一時ファイルに書き出す（クォート問題を回避）
           {
             cat workflow/prompts/02_analyze_trends.md
-            printf '\n\n---\n## 実行データ\n\n'
-            printf '### 検索計画 (search_plan.json)\n```json\n'
+            printf '\n\n---\n## Data\n\n'
+            printf '### search_plan.json\n```json\n'
             cat "$DRAFT_DIR/search_plan.json"
             printf '\n```\n\n'
-            printf '### 既存テーマ一覧（重複禁止）\n```json\n'
+            printf '### existing_themes.json\n```json\n'
             cat "$DRAFT_DIR/existing_themes.json"
             printf '\n```\n'
           } > /tmp/prompt_step2.txt
-
           set +e
           OUTPUT=$(claude --print - < /tmp/prompt_step2.txt 2>&1)
           EXIT_CODE=$?
           set -e
-
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error title=Step2失敗::競合分析・トレンド収集でエラーが発生しました"
+            echo "::error::step2 failed"
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-
           echo "$OUTPUT" > "$DRAFT_DIR/raw_trends.md"
-          echo "::notice::トレンド分析が完了しました"
+          echo "::notice::step2 done"
 
-      # ──────────────────────────────────────────────────
-      # 4. Step 3: Claude が下書きを生成（基本3本、最大4本）
-      # ──────────────────────────────────────────────────
-      - name: "[Step 3] 投稿下書きを生成（基本3本、最大4本）"
+      - name: step3-generate-drafts
         id: step3
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           DRAFT_DIR="marketing/content-plan/drafts/$DATE"
-
           {
             cat workflow/prompts/03_generate_drafts.md
-            printf '\n\n---\n## 実行データ\n\n'
-            printf '### 本日のトレンド分析結果\n'
+            printf '\n\n---\n## Data\n\n'
+            printf '### raw_trends.md\n'
             cat "$DRAFT_DIR/raw_trends.md"
-            printf '\n\n### 既存テーマ（重複禁止）\n```json\n'
+            printf '\n\n### existing_themes.json\n```json\n'
             cat "$DRAFT_DIR/existing_themes.json"
             printf '\n```\n'
           } > /tmp/prompt_step3.txt
-
           set +e
           OUTPUT=$(claude --print - < /tmp/prompt_step3.txt 2>&1)
           EXIT_CODE=$?
           set -e
-
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error title=Step3失敗::下書き生成でエラーが発生しました"
+            echo "::error::step3 failed"
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-
           echo "$OUTPUT" > "$DRAFT_DIR/drafts.md"
-          echo "::notice::下書き生成が完了しました"
+          echo "::notice::step3 done"
 
-      # ──────────────────────────────────────────────────
-      # 5. Step 4: 検証テンプレートを生成（Python スクリプト）
-      # ──────────────────────────────────────────────────
-      - name: "[Step 4] 検証チェックリスト生成"
+      - name: step4-verify-template
         run: python3 workflow/03_verify_drafts.py --date "$DATE"
 
-      # ──────────────────────────────────────────────────
-      # 6. Step 5: Claude が事実検証（2ソース以上）
-      # ──────────────────────────────────────────────────
-      - name: "[Step 5] 事実主張を検証（2ソース以上）"
+      - name: step5-verify-facts
         id: step5
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           DRAFT_DIR="marketing/content-plan/drafts/$DATE"
-
           {
             cat workflow/prompts/05_verify_facts.md
-            printf '\n\n---\n## 実行データ\n\n'
-            printf '### 検証対象の下書き\n'
+            printf '\n\n---\n## Data\n\n'
+            printf '### drafts.md\n'
             cat "$DRAFT_DIR/drafts.md"
-            printf '\n\n### 検証テンプレート\n```json\n'
+            printf '\n\n### verification_template.json\n```json\n'
             cat "$DRAFT_DIR/verification_template.json"
             printf '\n```\n'
           } > /tmp/prompt_step5.txt
-
           set +e
           OUTPUT=$(claude --print - < /tmp/prompt_step5.txt 2>&1)
           EXIT_CODE=$?
           set -e
-
           if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error title=Step5失敗::事実検証でエラーが発生しました"
+            echo "::error::step5 failed"
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-
           echo "$OUTPUT" > "$DRAFT_DIR/verification_log.md"
-          echo "::notice::事実検証が完了しました"
+          echo "::notice::step5 done"
 
-      # ──────────────────────────────────────────────────
-      # 7. 下書きをコミット（はじめさんの確認ウィンドウ）
-      # ──────────────────────────────────────────────────
-      - name: "下書きをコミット（確認用）"
+      - name: commit-drafts
         run: |
           git config user.name "hajime-bot[workflow]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add "marketing/content-plan/drafts/$DATE/"
-
-          # 変更がない場合はスキップ
           if git diff --cached --quiet; then
-            echo "::notice::コミットする変更がありません"
+            echo "::notice::nothing to commit"
             exit 0
           fi
-
-          git commit -m "draft: [$DATE] X投稿下書き生成完了 - drafts.md を確認してください"
+          git commit -m "draft: [$DATE] drafts ready for review"
           git push
 
-      # ──────────────────────────────────────────────────
-      # 8. 予約投稿の案内（ドライランでない場合）
-      # ──────────────────────────────────────────────────
-      - name: "予約投稿の手順を案内"
+      - name: notify-schedule
         run: |
-          echo "::notice::下書きの確認後、scripts/x-schedule-post.md の手順に従って予約投稿を登録してください"
-          echo "::notice::下書きの場所: marketing/content-plan/drafts/$DATE/drafts.md"
+          echo "::notice::Drafts saved to marketing/content-plan/drafts/$DATE/drafts.md"
+          echo "::notice::Follow scripts/x-schedule-post.md to schedule posts"
 
-      # ──────────────────────────────────────────────────
-      # 9. 認証エラー時のIssue通知（トークン期限切れを即認知）
-      # ──────────────────────────────────────────────────
-      - name: "トークン期限切れ時にIssueで通知"
+      - name: notify-token-expiry
         if: failure()
         uses: actions/github-script@v7
         env:
@@ -223,60 +171,42 @@ jobs:
           script: |
             const failedSteps = ['step2', 'step3', 'step5']
               .filter(s => process.env[`${s.toUpperCase()}_RESULT`] === 'failure');
-
             if (failedSteps.length === 0) return;
 
+            const now = new Date().toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'});
             const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'token-expired'
+              labels: 'token-expired',
             });
-
             if (existing.data.length > 0) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existing.data[0].number,
-                body: `🔄 再度ワークフローが失敗しました（${new Date().toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})} JST）\n\nまだトークンの更新が完了していません。`
+                body: 'Workflow failed again at ' + now + ' JST. Steps: ' + failedSteps.join(', '),
               });
               return;
             }
-
+            const bodyLines = [
+              '## Claude OAuth token renewal required',
+              '',
+              'Failed at: ' + now + ' JST',
+              'Failed steps: ' + failedSteps.join(', '),
+              '',
+              '### Steps to fix',
+              '1. Run `claude setup-token` locally and copy the token',
+              '2. Go to Settings > Secrets > CLAUDE_CODE_OAUTH_TOKEN > Update',
+              '3. Re-run the workflow from the Actions tab',
+              '4. Close this issue',
+              '',
+              'Note: Use CLAUDE_CODE_OAUTH_TOKEN, not ANTHROPIC_API_KEY',
+            ];
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🔑 [要対応] Claude OAuthトークンの更新が必要です（${new Date().toLocaleDateString('ja-JP', {timeZone: 'Asia/Tokyo'})}）`,
+              title: '[ACTION REQUIRED] Claude OAuth token expired (' + now + ')',
               labels: ['token-expired', 'bot'],
-              body: `## Claude OAuthトークンの更新が必要です
-
-ワークフローが認証エラーで失敗しました。
-
-**失敗日時:** ${new Date().toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})} JST
-**失敗ステップ:** ${failedSteps.join(', ')}
-
----
-
-### 対処手順（5分で完了）
-
-**1. ローカルでトークンを再発行:**
-\`\`\`bash
-claude setup-token
-\`\`\`
-
-**2. 出力されたトークンをコピー**
-
-**3. GitHubのSecretsを更新:**
-- このリポジトリの **Settings** → **Secrets and variables** → **Actions**
-- \`CLAUDE_CODE_OAUTH_TOKEN\` の右の **Update** をクリック
-- 新しいトークンを貼り付けて **Save**
-
-**4. ワークフローを手動で再実行:**
-- **Actions** タブ → **@hajime_cp 日次X投稿ワークフロー** → **Run workflow**
-
-**5. このIssueをクローズ**
-
----
-
-> ⚠️ \`ANTHROPIC_API_KEY\` は使用しません。必ず \`CLAUDE_CODE_OAUTH_TOKEN\` を更新してください。`
+              body: bodyLines.join('\n'),
             });
