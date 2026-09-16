@@ -86,79 +86,67 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          # プロンプトに動的データを注入して実行
-          SEARCH_PLAN=$(cat "marketing/content-plan/drafts/$DATE/search_plan.json")
-          EXISTING_THEMES=$(cat "marketing/content-plan/drafts/$DATE/existing_themes.json")
+          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
 
-          PROMPT=$(cat workflow/prompts/02_analyze_trends.md)
-          FULL_PROMPT="$PROMPT
+          # プロンプトを一時ファイルに書き出す（クォート問題を回避）
+          {
+            cat workflow/prompts/02_analyze_trends.md
+            printf '\n\n---\n## 実行データ\n\n'
+            printf '### 検索計画 (search_plan.json)\n```json\n'
+            cat "$DRAFT_DIR/search_plan.json"
+            printf '\n```\n\n'
+            printf '### 既存テーマ一覧（重複禁止）\n```json\n'
+            cat "$DRAFT_DIR/existing_themes.json"
+            printf '\n```\n'
+          } > /tmp/prompt_step2.txt
 
----
-## 実行データ
-
-### 検索計画 (search_plan.json)
-\`\`\`json
-$SEARCH_PLAN
-\`\`\`
-
-### 既存テーマ一覧（重複禁止）
-\`\`\`json
-$EXISTING_THEMES
-\`\`\`"
-
-          # Claude CLI を実行し、出力をキャプチャ
           set +e
-          OUTPUT=$(echo "$FULL_PROMPT" | claude --print - 2>&1)
+          OUTPUT=$(claude --print - < /tmp/prompt_step2.txt 2>&1)
           EXIT_CODE=$?
           set -e
 
           if [ $EXIT_CODE -ne 0 ]; then
-            _handle_claude_error "$OUTPUT" "step2"
+            echo "::error title=Step2失敗::競合分析・トレンド収集でエラーが発生しました"
+            echo "$OUTPUT"
             exit $EXIT_CODE
           fi
 
-          echo "$OUTPUT" > "marketing/content-plan/drafts/$DATE/raw_trends.md"
+          echo "$OUTPUT" > "$DRAFT_DIR/raw_trends.md"
           echo "::notice::トレンド分析が完了しました"
-        shell: bash
 
       # ──────────────────────────────────────────────────
-      # 4. Step 3: Claude が下書きを生成（基本3本、重要ニュース時は最大5本）
+      # 4. Step 3: Claude が下書きを生成（基本3本、最大4本）
       # ──────────────────────────────────────────────────
       - name: "[Step 3] 投稿下書きを生成（基本3本、最大4本）"
         id: step3
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          TRENDS=$(cat "marketing/content-plan/drafts/$DATE/raw_trends.md")
-          EXISTING=$(cat "marketing/content-plan/drafts/$DATE/existing_themes.json")
-          PROMPT=$(cat workflow/prompts/03_generate_drafts.md)
+          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
 
-          FULL_PROMPT="$PROMPT
-
----
-## 実行データ
-
-### 本日のトレンド分析結果
-$TRENDS
-
-### 既存テーマ（重複禁止）
-\`\`\`json
-$EXISTING
-\`\`\`"
+          {
+            cat workflow/prompts/03_generate_drafts.md
+            printf '\n\n---\n## 実行データ\n\n'
+            printf '### 本日のトレンド分析結果\n'
+            cat "$DRAFT_DIR/raw_trends.md"
+            printf '\n\n### 既存テーマ（重複禁止）\n```json\n'
+            cat "$DRAFT_DIR/existing_themes.json"
+            printf '\n```\n'
+          } > /tmp/prompt_step3.txt
 
           set +e
-          OUTPUT=$(echo "$FULL_PROMPT" | claude --print - 2>&1)
+          OUTPUT=$(claude --print - < /tmp/prompt_step3.txt 2>&1)
           EXIT_CODE=$?
           set -e
 
           if [ $EXIT_CODE -ne 0 ]; then
-            _handle_claude_error "$OUTPUT" "step3"
+            echo "::error title=Step3失敗::下書き生成でエラーが発生しました"
+            echo "$OUTPUT"
             exit $EXIT_CODE
           fi
 
-          echo "$OUTPUT" > "marketing/content-plan/drafts/$DATE/drafts.md"
+          echo "$OUTPUT" > "$DRAFT_DIR/drafts.md"
           echo "::notice::下書き生成が完了しました"
-        shell: bash
 
       # ──────────────────────────────────────────────────
       # 5. Step 4: 検証テンプレートを生成（Python スクリプト）
@@ -174,36 +162,31 @@ $EXISTING
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          DRAFTS=$(cat "marketing/content-plan/drafts/$DATE/drafts.md")
-          TEMPLATE=$(cat "marketing/content-plan/drafts/$DATE/verification_template.json")
-          PROMPT=$(cat workflow/prompts/05_verify_facts.md)
+          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
 
-          FULL_PROMPT="$PROMPT
-
----
-## 実行データ
-
-### 検証対象の下書き
-$DRAFTS
-
-### 検証テンプレート
-\`\`\`json
-$TEMPLATE
-\`\`\`"
+          {
+            cat workflow/prompts/05_verify_facts.md
+            printf '\n\n---\n## 実行データ\n\n'
+            printf '### 検証対象の下書き\n'
+            cat "$DRAFT_DIR/drafts.md"
+            printf '\n\n### 検証テンプレート\n```json\n'
+            cat "$DRAFT_DIR/verification_template.json"
+            printf '\n```\n'
+          } > /tmp/prompt_step5.txt
 
           set +e
-          OUTPUT=$(echo "$FULL_PROMPT" | claude --print - 2>&1)
+          OUTPUT=$(claude --print - < /tmp/prompt_step5.txt 2>&1)
           EXIT_CODE=$?
           set -e
 
           if [ $EXIT_CODE -ne 0 ]; then
-            _handle_claude_error "$OUTPUT" "step5"
+            echo "::error title=Step5失敗::事実検証でエラーが発生しました"
+            echo "$OUTPUT"
             exit $EXIT_CODE
           fi
 
-          echo "$OUTPUT" > "marketing/content-plan/drafts/$DATE/verification_log.md"
+          echo "$OUTPUT" > "$DRAFT_DIR/verification_log.md"
           echo "::notice::事実検証が完了しました"
-        shell: bash
 
       # ──────────────────────────────────────────────────
       # 7. 下書きをコミット（はじめさんの確認ウィンドウ）
@@ -260,7 +243,6 @@ $TEMPLATE
 
             if (failedSteps.length === 0) return;
 
-            // 既存のトークン期限切れIssueがないか確認
             const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -269,7 +251,6 @@ $TEMPLATE
             });
 
             if (existing.data.length > 0) {
-              // 既存Issueにコメントを追加
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -279,7 +260,6 @@ $TEMPLATE
               return;
             }
 
-            // 新規Issueを作成
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
