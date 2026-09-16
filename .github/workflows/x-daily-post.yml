@@ -198,17 +198,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "📝 [$DATE] X投稿下書き（確認してください）
-
-下書き:        marketing/content-plan/drafts/$DATE/drafts.md
-検証ログ:      marketing/content-plan/drafts/$DATE/verification_log.md
-トレンド分析:  marketing/content-plan/drafts/$DATE/raw_trends.md
-
-─────────────────────────────────────────
-✅ 問題がなければそのまま放置（投稿へ進みます）
-✏️  修正したい場合は drafts.md を編集してください
-🚫 スキップしたい投稿は該当ブロックを削除してください
-─────────────────────────────────────────"
+          git commit -m "draft: [$DATE] X投稿下書き生成完了 - drafts.md を確認してください"
           git push
 
       # ──────────────────────────────────────────────────
