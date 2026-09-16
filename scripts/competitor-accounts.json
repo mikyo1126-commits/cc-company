@@ -1,0 +1,41 @@
+{
+  "watch_accounts": [
+    {
+      "handle": "fuuta_fx_trader",
+      "name": "スキャトレふうた",
+      "lang": "ja",
+      "note": "FX・株、6万人超、初心者向け解説に強い"
+    },
+    {
+      "handle": "flove_fxtrader",
+      "name": "えふらぶ",
+      "lang": "ja",
+      "note": "ユーロドル・ドル円・ゴールドのデイトレ、リアルタイム相場観"
+    },
+    {
+      "handle": "tsubasa_yozawa",
+      "name": "与沢翼",
+      "lang": "ja",
+      "note": "大型アカウント、スキャルピング・相場解説"
+    },
+    {
+      "handle": "PeterLBrandt",
+      "name": "Peter Brandt",
+      "lang": "en",
+      "note": "ゴールド・コモディティのテクニカル分析、79万人超"
+    },
+    {
+      "handle": "Tradingnrg",
+      "name": "Lior Cohen",
+      "lang": "en",
+      "note": "ゴールド・シルバー・原油の相場コメント"
+    }
+  ],
+  "topic_queries": [
+    { "query": "FX ドル円 -filter:retweets",        "category": "FX" },
+    { "query": "ゴールド 金価格 -filter:retweets",   "category": "ゴールド" },
+    { "query": "ビットコイン BTC -filter:retweets",  "category": "仮想通貨" },
+    { "query": "FOMC 日銀 雇用統計 -filter:retweets","category": "マクロ経済" },
+    { "query": "トレード 損切り メンタル -filter:retweets", "category": "トレード心理" }
+  ]
+}
