@@ -5,12 +5,6 @@ on:
     # 毎日 05:00 JST（= UTC 20:00 前日）
     - cron: '0 20 * * *'
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'ドライラン（下書き生成のみ・予約投稿なし）'
-        type: boolean
-        required: false
-        default: false
 
 env:
   TZ: Asia/Tokyo
@@ -221,7 +215,6 @@ jobs:
       # 8. 予約投稿の案内（ドライランでない場合）
       # ──────────────────────────────────────────────────
       - name: "予約投稿の手順を案内"
-        if: ${{ inputs.dry_run != 'true' }}
         run: |
           echo "::notice::下書きの確認後、scripts/x-schedule-post.md の手順に従って予約投稿を登録してください"
           echo "::notice::下書きの場所: marketing/content-plan/drafts/$DATE/drafts.md"
