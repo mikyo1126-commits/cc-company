@@ -40,7 +40,7 @@ jobs:
           cache: 'pip'
 
       - name: 依存ライブラリをインストール
-        run: pip install requests python-dateutil
+        run: pip install -r requirements.txt
 
       - name: Node.js セットアップ（Claude Code CLI用）
         uses: actions/setup-node@v4
