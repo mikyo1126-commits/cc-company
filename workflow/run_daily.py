@@ -89,9 +89,6 @@ def main():
     ])
 
     # ---- Step 4: 検証テンプレート生成（スクリプト）----
-    print(f"\n⏸  drafts.md の生成が完了したら Enter キーを押してください...")
-    input()
-
     ok = run_step(
         "Step 4: 検証チェックリストテンプレートを生成",
         [sys.executable, str(ROOT_DIR / "workflow" / "03_verify_drafts.py"), "--date", date_str]
