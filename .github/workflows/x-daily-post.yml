@@ -74,7 +74,7 @@ jobs:
             printf '\n```\n'
           } > /tmp/prompt_step2.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step2.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step2.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
@@ -101,7 +101,7 @@ jobs:
             printf '\n```\n'
           } > /tmp/prompt_step3.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step3.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step3.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
@@ -131,7 +131,7 @@ jobs:
             printf '\n```\n'
           } > /tmp/prompt_step5.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step5.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step5.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
