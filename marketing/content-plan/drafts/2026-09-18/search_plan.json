@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-18T09:40:02.682731+09:00",
+  "generated_at": "2026-09-18T10:24:25.810046+09:00",
   "target_date": "2026-09-18",
   "instruction": "以下の queries を順番に WebSearch で実行し、各結果を results フィールドに追記してから raw_trends.json として保存してください。「なぜ伸びているか」の分析は results 収集後に Claude 自身が行います。",
   "queries": [
