@@ -1,16 +1,31 @@
-name: "@hajime_cp X post workflow"
+name: "@hajime_cp draft generate"
 
 on:
   schedule:
-    - cron: '0 20 * * *'
+    # 朝: 21:00 UTC = 6:00 JST
+    - cron: '0 21 * * *'
+    # 昼: 03:00 UTC = 12:00 JST
+    - cron: '0 3 * * *'
+    # 晩: 09:00 UTC = 18:00 JST
+    - cron: '0 9 * * *'
   workflow_dispatch:
+    inputs:
+      slot:
+        description: '投稿スロット (morning/noon/evening)'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - noon
+          - evening
 
 env:
   TZ: Asia/Tokyo
 
 jobs:
-  x-daily-post:
-    name: daily-post
+  draft-generate:
+    name: draft-generate
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -50,31 +65,57 @@ jobs:
           fi
           echo "::notice::OAuth token validated"
 
-      - name: step1-collect-plan
-        id: step1
+      - name: determine-slot
+        id: slot
         run: |
           DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
           echo "DATE=$DATE" >> $GITHUB_ENV
-          python3 workflow/01_collect_trends.py --date "$DATE"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SLOT="${{ github.event.inputs.slot }}"
+          else
+            UTC_HOUR=$(date -u +%H)
+            case "$UTC_HOUR" in
+              21) SLOT="morning" ;;
+              03) SLOT="noon" ;;
+              09) SLOT="evening" ;;
+              *)  SLOT="morning" ;;
+            esac
+          fi
+
+          echo "SLOT=$SLOT" >> $GITHUB_ENV
+          case "$SLOT" in
+            morning) SLOT_LABEL="朝" ;;
+            noon)    SLOT_LABEL="昼" ;;
+            evening) SLOT_LABEL="晩" ;;
+          esac
+          echo "SLOT_LABEL=$SLOT_LABEL" >> $GITHUB_ENV
+          echo "::notice::Slot: $SLOT ($SLOT_LABEL)"
+
+      - name: step1-collect-plan
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          mkdir -p "$SLOT_DIR"
+          python3 workflow/01_collect_trends.py --date "$DATE" --slot "$SLOT"
 
       - name: step2-analyze-trends
         id: step2
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
           {
             cat workflow/prompts/02_analyze_trends.md
             printf '\n\n---\n## Data\n\n'
             printf '### search_plan.json\n```json\n'
-            cat "$DRAFT_DIR/search_plan.json"
+            cat "$SLOT_DIR/search_plan.json"
             printf '\n```\n\n'
             printf '### existing_themes.json\n```json\n'
-            cat "$DRAFT_DIR/existing_themes.json"
+            cat "$SLOT_DIR/existing_themes.json"
             printf '\n```\n'
           } > /tmp/prompt_step2.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step2.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step2.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
@@ -82,26 +123,30 @@ jobs:
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-          echo "$OUTPUT" > "$DRAFT_DIR/raw_trends.md"
+          echo "$OUTPUT" > "$SLOT_DIR/raw_trends.md"
           echo "::notice::step2 done"
 
-      - name: step3-generate-drafts
+      - name: step3-generate-draft
         id: step3
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
           {
-            cat workflow/prompts/03_generate_drafts.md
+            cat workflow/prompts/03_generate_single_draft.md
             printf '\n\n---\n## Data\n\n'
-            printf '### raw_trends.md\n'
-            cat "$DRAFT_DIR/raw_trends.md"
+            printf '### 投稿スロット\n'
+            printf "スロット: %s（%s）\n" "$SLOT" "$SLOT_LABEL"
+            printf '\n### raw_trends.md\n'
+            cat "$SLOT_DIR/raw_trends.md"
             printf '\n\n### existing_themes.json\n```json\n'
-            cat "$DRAFT_DIR/existing_themes.json"
-            printf '\n```\n'
+            cat "$SLOT_DIR/existing_themes.json"
+            printf '\n```\n\n'
+            printf '### feedback.md（はじめさんからの改善フィードバック）\n'
+            cat workflow/feedback.md
           } > /tmp/prompt_step3.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step3.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step3.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
@@ -109,29 +154,29 @@ jobs:
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-          echo "$OUTPUT" > "$DRAFT_DIR/drafts.md"
+          echo "$OUTPUT" > "$SLOT_DIR/draft.md"
           echo "::notice::step3 done"
 
       - name: step4-verify-template
-        run: python3 workflow/03_verify_drafts.py --date "$DATE"
+        run: python3 workflow/03_verify_drafts.py --date "$DATE" --slot "$SLOT"
 
       - name: step5-verify-facts
         id: step5
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          DRAFT_DIR="marketing/content-plan/drafts/$DATE"
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
           {
             cat workflow/prompts/05_verify_facts.md
             printf '\n\n---\n## Data\n\n'
-            printf '### drafts.md\n'
-            cat "$DRAFT_DIR/drafts.md"
+            printf '### draft.md\n'
+            cat "$SLOT_DIR/draft.md"
             printf '\n\n### verification_template.json\n```json\n'
-            cat "$DRAFT_DIR/verification_template.json"
+            cat "$SLOT_DIR/verification_template.json"
             printf '\n```\n'
           } > /tmp/prompt_step5.txt
           set +e
-          OUTPUT=$(claude --print - < /tmp/prompt_step5.txt 2>&1)
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step5.txt 2>&1)
           EXIT_CODE=$?
           set -e
           if [ $EXIT_CODE -ne 0 ]; then
@@ -139,25 +184,25 @@ jobs:
             echo "$OUTPUT"
             exit $EXIT_CODE
           fi
-          echo "$OUTPUT" > "$DRAFT_DIR/verification_log.md"
+          echo "$OUTPUT" > "$SLOT_DIR/verification_log.md"
           echo "::notice::step5 done"
 
-      - name: commit-drafts
+      - name: commit-draft
         run: |
           git config user.name "hajime-bot[workflow]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "marketing/content-plan/drafts/$DATE/"
+          git add "marketing/content-plan/drafts/$DATE/$SLOT/"
           if git diff --cached --quiet; then
             echo "::notice::nothing to commit"
             exit 0
           fi
-          git commit -m "draft: [$DATE] drafts ready for review"
+          git commit -m "draft: [$DATE/$SLOT] draft ready for review"
           git push
 
-      - name: notify-schedule
+      - name: notify-ready
         run: |
-          echo "::notice::Drafts saved to marketing/content-plan/drafts/$DATE/drafts.md"
-          echo "::notice::Follow scripts/x-schedule-post.md to schedule posts"
+          echo "::notice::Draft saved to marketing/content-plan/drafts/$DATE/$SLOT/draft.md"
+          echo "::notice::Post will be published automatically in 1 hour by x-post-publish workflow"
 
       - name: notify-token-expiry
         if: failure()

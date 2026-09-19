@@ -62,8 +62,11 @@ def build_search_queries(accounts_data: dict) -> list[dict]:
     return queries
 
 
-def prepare_output_dir(date_str: str) -> Path:
-    out_dir = DRAFTS_DIR / date_str
+def prepare_output_dir(date_str: str, slot: str | None = None) -> Path:
+    if slot:
+        out_dir = DRAFTS_DIR / date_str / slot
+    else:
+        out_dir = DRAFTS_DIR / date_str
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -109,10 +112,12 @@ def load_existing_themes() -> list[str]:
 def main():
     parser = argparse.ArgumentParser(description="競合・トレンド収集の検索計画を生成する")
     parser.add_argument("--date", help="実行日付 YYYY-MM-DD（省略時は今日）")
+    parser.add_argument("--slot", choices=["morning", "noon", "evening"],
+                        help="投稿スロット（指定時はスロット別ディレクトリに保存）")
     args = parser.parse_args()
 
     date_str = get_today_str(args.date)
-    print(f"[01_collect_trends] 実行日付: {date_str}")
+    print(f"[01_collect_trends] 実行日付: {date_str}" + (f" / slot: {args.slot}" if args.slot else ""))
 
     # アカウント定義読み込み
     if not ACCOUNTS_JSON.exists():
@@ -125,7 +130,7 @@ def main():
     print(f"  検索クエリ数: {len(queries)}（アカウント: {len(accounts_data['watch_accounts'])}件 + トピック: {len(accounts_data['topic_queries'])}件）")
 
     # 出力ディレクトリ準備
-    out_dir = prepare_output_dir(date_str)
+    out_dir = prepare_output_dir(date_str, args.slot)
     print(f"  出力先: {out_dir}")
 
     # 検索計画書を保存

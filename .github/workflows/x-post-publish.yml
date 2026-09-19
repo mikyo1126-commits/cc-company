@@ -1,0 +1,166 @@
+name: "@hajime_cp post publish"
+
+on:
+  schedule:
+    # 朝: 22:00 UTC = 7:00 JST  (draft-generate の 1時間後)
+    - cron: '0 22 * * *'
+    # 昼: 04:00 UTC = 13:00 JST
+    - cron: '0 4 * * *'
+    # 晩: 10:00 UTC = 19:00 JST
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: '投稿スロット (morning/noon/evening)'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - noon
+          - evening
+      date:
+        description: '投稿日付 YYYY-MM-DD（省略時は今日）'
+        required: false
+        default: ''
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  post-publish:
+    name: post-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: install-deps
+        run: pip install -r requirements.txt
+
+      - name: determine-slot
+        id: slot
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            DATE="${{ github.event.inputs.date }}"
+          else
+            DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          fi
+          echo "DATE=$DATE" >> $GITHUB_ENV
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SLOT="${{ github.event.inputs.slot }}"
+          else
+            UTC_HOUR=$(date -u +%H)
+            case "$UTC_HOUR" in
+              22) SLOT="morning" ;;
+              04) SLOT="noon" ;;
+              10) SLOT="evening" ;;
+              *)  SLOT="morning" ;;
+            esac
+          fi
+
+          echo "SLOT=$SLOT" >> $GITHUB_ENV
+          echo "::notice::Publishing slot: $SLOT for $DATE"
+
+      - name: check-draft-exists
+        id: check_draft
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          DRAFT_FILE="$SLOT_DIR/draft.md"
+          POSTED_FLAG="$SLOT_DIR/posted.flag"
+          SKIP_FLAG="$SLOT_DIR/skip.flag"
+
+          if [ ! -f "$DRAFT_FILE" ]; then
+            echo "::warning::Draft not found: $DRAFT_FILE — skipping publish"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ -f "$POSTED_FLAG" ]; then
+            echo "::notice::Already posted: $POSTED_FLAG — skipping"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ -f "$SKIP_FLAG" ]; then
+            echo "::notice::Skip flag found: $SKIP_FLAG — skipping publish"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "draft_path=$DRAFT_FILE" >> $GITHUB_OUTPUT
+          echo "slot_dir=$SLOT_DIR" >> $GITHUB_OUTPUT
+
+      - name: verify-before-post
+        if: steps.check_draft.outputs.skip == 'false'
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          VLOG="$SLOT_DIR/verification_log.md"
+
+          if [ ! -f "$VLOG" ]; then
+            echo "::error::verification_log.md not found. Cannot publish without fact verification."
+            exit 1
+          fi
+
+          # 検証ログに未解決のエラーがないか確認
+          if grep -qi "❌\|エラー\|ERROR\|未確認\|要確認" "$VLOG"; then
+            echo "::error::Verification log contains unresolved issues. Review $VLOG before publishing."
+            cat "$VLOG"
+            exit 1
+          fi
+
+          echo "::notice::Verification passed"
+
+      - name: post-to-x
+        if: steps.check_draft.outputs.skip == 'false'
+        env:
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        run: |
+          DRAFT_FILE="marketing/content-plan/drafts/$DATE/$SLOT/draft.md"
+
+          if [ -z "$TWITTER_API_KEY" ]; then
+            echo "::warning::TWITTER_API_KEY not set — skipping actual post (dry-run mode)"
+            echo "::notice::Draft content that would be posted:"
+            cat "$DRAFT_FILE"
+            exit 0
+          fi
+
+          python3 workflow/04_post_to_x.py \
+            --date "$DATE" \
+            --slot "$SLOT"
+
+      - name: mark-as-posted
+        if: steps.check_draft.outputs.skip == 'false'
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          POSTED_AT=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')
+
+          git config user.name "hajime-bot[workflow]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "$POSTED_AT" > "$SLOT_DIR/posted.flag"
+          git add "$SLOT_DIR/posted.flag"
+          git commit -m "post: [$DATE/$SLOT] published to X at $POSTED_AT"
+          git push
+
+      - name: notify-done
+        if: steps.check_draft.outputs.skip == 'false'
+        run: |
+          echo "::notice::Post published: $DATE/$SLOT"
