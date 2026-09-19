@@ -1,0 +1,6 @@
+{
+  "generated_at": "2026-09-20T07:02:34.890610+09:00",
+  "protocol": "CLAUDE.md §3 検証プロトコル（1〜6）に準拠",
+  "instruction": "各 fact_claims の項目を独立した2つ以上のソースで裏取りし、verified フィールドと sources フィールドを埋めてください。すべての項目が verified=true になるまで下書きを修正し、完了後に verification_log.md として保存してください。",
+  "posts": []
+}
