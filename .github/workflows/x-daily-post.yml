@@ -98,7 +98,9 @@ jobs:
             cat "$DRAFT_DIR/raw_trends.md"
             printf '\n\n### existing_themes.json\n```json\n'
             cat "$DRAFT_DIR/existing_themes.json"
-            printf '\n```\n'
+            printf '\n```\n\n'
+            printf '### feedback.md（はじめさんからの改善フィードバック）\n'
+            cat workflow/feedback.md
           } > /tmp/prompt_step3.txt
           set +e
           OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step3.txt 2>&1)
