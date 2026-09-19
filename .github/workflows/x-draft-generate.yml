@@ -160,32 +160,86 @@ jobs:
       - name: step4-verify-template
         run: python3 workflow/03_verify_drafts.py --date "$DATE" --slot "$SLOT"
 
-      - name: step5-verify-facts
+      - name: step5-verify-and-fix
         id: step5
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
-          {
-            cat workflow/prompts/05_verify_facts.md
-            printf '\n\n---\n## Data\n\n'
-            printf '### draft.md\n'
-            cat "$SLOT_DIR/draft.md"
-            printf '\n\n### verification_template.json\n```json\n'
-            cat "$SLOT_DIR/verification_template.json"
-            printf '\n```\n'
-          } > /tmp/prompt_step5.txt
-          set +e
-          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step5.txt 2>&1)
-          EXIT_CODE=$?
-          set -e
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::step5 failed"
-            echo "$OUTPUT"
-            exit $EXIT_CODE
+          MAX_ATTEMPTS=3
+          VERIFIED=false
+
+          for ATTEMPT in 1 2 3; do
+            echo "::notice::Verification attempt $ATTEMPT/$MAX_ATTEMPTS"
+
+            # 検証テンプレートを最新の draft.md から再生成
+            python3 workflow/03_verify_drafts.py --date "$DATE" --slot "$SLOT"
+
+            # 検証実行
+            {
+              cat workflow/prompts/05_verify_facts.md
+              printf '\n\n---\n## Data\n\n'
+              printf '### draft.md\n'
+              cat "$SLOT_DIR/draft.md"
+              printf '\n\n### verification_template.json\n```json\n'
+              cat "$SLOT_DIR/verification_template.json"
+              printf '\n```\n'
+            } > /tmp/prompt_step5.txt
+
+            set +e
+            OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step5.txt 2>&1)
+            EXIT_CODE=$?
+            set -e
+
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "::error::step5 claude call failed on attempt $ATTEMPT"
+              echo "$OUTPUT"
+              exit $EXIT_CODE
+            fi
+
+            echo "$OUTPUT" > "$SLOT_DIR/verification_log.md"
+
+            # ❌ が残っているか確認
+            if ! grep -q "^- ❌" "$SLOT_DIR/verification_log.md"; then
+              echo "::notice::All facts verified on attempt $ATTEMPT"
+              VERIFIED=true
+              break
+            fi
+
+            echo "::warning::Verification issues found on attempt $ATTEMPT — running fix..."
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              # 修正ステップ: 検証ログを元に draft.md を修正
+              {
+                cat workflow/prompts/06_fix_draft.md
+                printf '\n\n---\n## 現在の下書き（draft.md）\n\n'
+                cat "$SLOT_DIR/draft.md"
+                printf '\n\n---\n## 検証ログ（verification_log.md）\n\n'
+                cat "$SLOT_DIR/verification_log.md"
+              } > /tmp/prompt_fix.txt
+
+              set +e
+              FIXED=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_fix.txt 2>&1)
+              FIX_EXIT=$?
+              set -e
+
+              if [ $FIX_EXIT -ne 0 ]; then
+                echo "::error::Fix step failed on attempt $ATTEMPT"
+                echo "$FIXED"
+                exit $FIX_EXIT
+              fi
+
+              echo "$FIXED" > "$SLOT_DIR/draft.md"
+              echo "::notice::Draft updated by fix step (attempt $ATTEMPT)"
+            fi
+          done
+
+          if [ "$VERIFIED" = "false" ]; then
+            echo "::error::Fact verification failed after $MAX_ATTEMPTS attempts. Blocking commit."
+            echo "::error::Review verification_log.md:"
+            cat "$SLOT_DIR/verification_log.md"
+            exit 1
           fi
-          echo "$OUTPUT" > "$SLOT_DIR/verification_log.md"
-          echo "::notice::step5 done"
 
       - name: commit-draft
         run: |
@@ -196,13 +250,13 @@ jobs:
             echo "::notice::nothing to commit"
             exit 0
           fi
-          git commit -m "draft: [$DATE/$SLOT] draft ready for review"
+          git commit -m "draft: [$DATE/$SLOT] draft verified and ready"
           git push
 
       - name: notify-ready
         run: |
           echo "::notice::Draft saved to marketing/content-plan/drafts/$DATE/$SLOT/draft.md"
-          echo "::notice::Post will be published automatically in 1 hour by x-post-publish workflow"
+          echo "::notice::All facts verified. Post will be published in 1 hour by x-post-publish workflow"
 
       - name: notify-token-expiry
         if: failure()
