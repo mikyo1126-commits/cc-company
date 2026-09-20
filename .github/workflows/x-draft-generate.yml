@@ -155,6 +155,15 @@ jobs:
             exit $EXIT_CODE
           fi
           echo "$OUTPUT" > "$SLOT_DIR/draft.md"
+          # コードフェンス（```）で囲まれている場合はその中身だけ抽出する
+          python3 -c "
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding='utf-8').read()
+m = re.search(r'\`\`\`[^\n]*\n(.*?)\`\`\`', text, re.DOTALL)
+if m:
+    open(path, 'w', encoding='utf-8').write(m.group(1).strip())
+" "$SLOT_DIR/draft.md"
           echo "::notice::step3 done"
 
       - name: step4-verify-template
@@ -230,6 +239,15 @@ jobs:
               fi
 
               echo "$FIXED" > "$SLOT_DIR/draft.md"
+              # コードフェンスが含まれていたら中身だけ抽出
+              python3 -c "
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding='utf-8').read()
+m = re.search(r'\`\`\`[^\n]*\n(.*?)\`\`\`', text, re.DOTALL)
+if m:
+    open(path, 'w', encoding='utf-8').write(m.group(1).strip())
+" "$SLOT_DIR/draft.md"
               echo "::notice::Draft updated by fix step (attempt $ATTEMPT)"
             fi
           done

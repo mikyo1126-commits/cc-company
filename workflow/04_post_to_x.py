@@ -11,24 +11,10 @@ Usage:
 import argparse
 import os
 import sys
-import json
-import hmac
-import hashlib
-import base64
-import time
-import random
-import string
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
 
 ROOT_DIR = Path(__file__).parent.parent
 DRAFTS_DIR = ROOT_DIR / "marketing" / "content-plan" / "drafts"
-JST = timezone(timedelta(hours=9))
-
-X_API_URL = "https://api.twitter.com/2/tweets"
 
 
 def load_draft(date_str: str, slot: str) -> str:
@@ -39,69 +25,16 @@ def load_draft(date_str: str, slot: str) -> str:
     return draft_path.read_text(encoding="utf-8").strip()
 
 
-def oauth1_header(method: str, url: str, params: dict, credentials: dict) -> str:
-    nonce = "".join(random.choices(string.ascii_letters + string.digits, k=32))
-    timestamp = str(int(time.time()))
-
-    oauth_params = {
-        "oauth_consumer_key": credentials["api_key"],
-        "oauth_nonce": nonce,
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": timestamp,
-        "oauth_token": credentials["access_token"],
-        "oauth_version": "1.0",
-    }
-
-    all_params = {**params, **oauth_params}
-    sorted_params = "&".join(
-        f"{quote(k, safe='')}={quote(v, safe='')}"
-        for k, v in sorted(all_params.items())
-    )
-
-    base_string = "&".join([
-        method.upper(),
-        quote(url, safe=""),
-        quote(sorted_params, safe=""),
-    ])
-
-    signing_key = "&".join([
-        quote(credentials["api_secret"], safe=""),
-        quote(credentials["access_token_secret"], safe=""),
-    ])
-
-    signature = base64.b64encode(
-        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
-    ).decode()
-
-    oauth_params["oauth_signature"] = signature
-    header_value = "OAuth " + ", ".join(
-        f'{quote(k, safe="")}="{quote(v, safe="")}"'
-        for k, v in sorted(oauth_params.items())
-    )
-    return header_value
-
-
 def post_tweet(text: str, credentials: dict) -> dict:
-    body = json.dumps({"text": text}).encode("utf-8")
-    auth_header = oauth1_header("POST", X_API_URL, {}, credentials)
-
-    req = Request(
-        X_API_URL,
-        data=body,
-        headers={
-            "Authorization": auth_header,
-            "Content-Type": "application/json",
-        },
-        method="POST",
+    import tweepy
+    client = tweepy.Client(
+        consumer_key=credentials["api_key"],
+        consumer_secret=credentials["api_secret"],
+        access_token=credentials["access_token"],
+        access_token_secret=credentials["access_token_secret"],
     )
-
-    try:
-        with urlopen(req) as resp:
-            return json.loads(resp.read().decode())
-    except HTTPError as e:
-        error_body = e.read().decode()
-        print(f"HTTP {e.code}: {error_body}", file=sys.stderr)
-        raise
+    response = client.create_tweet(text=text)
+    return {"data": {"id": response.data["id"]}}
 
 
 def main():
