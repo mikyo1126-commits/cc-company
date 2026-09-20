@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-09-21T08:03:44.153713+09:00",
+  "collected_at": "2026-09-21T09:00:00+09:00",
+  "target_date": "2026-09-21",
+  "instruction": "以下の queries を順番に WebSearch で実行し、各結果を results フィールドに追記してから raw_trends.json として保存してください。「なぜ伸びているか」の分析は results 収集後に Claude 自身が行います。",
+  "data_quality_note": "WebSearchツールはXのログイン不要な検索エンジン結果(Google等のインデックス)を返すのみで、Xのライブ engagement (いいね・RT数・投稿からの経過時間)は取得できなかった。そのため『直近24時間で伸びている投稿』の特定・エンゲージメント率の算出は本日は不可能だった。捏造を避けるため、取得できなかった項目は素直に『不明』として記載する。",
+  "results": [
+    {
+      "type": "account",
+      "handle": "fuuta_fx_trader",
+      "name": "スキャトレふうた",
+      "found": "アカウント概要のみ取得（FX/株のトレーダー、YouTube・ブログ運営）。直近投稿の本文・投稿時刻・エンゲージメント数は検索結果からは確認できず",
+      "follower_count": "本日未再検証（前回9/20確認値: 約5.5〜6万人）",
+      "recent_post_engagement": "不明（WebSearchでは取得不可）",
+      "sources": ["https://x.com/fuuta_fx_trader"]
+    },
+    {
+      "type": "account",
+      "handle": "flove_fxtrader",
+      "name": "えふらぶ",
+      "found": "自作ツール(Quant Analyzer)の解説や仮想通貨入出金方法の記事告知が中心。相場コメント系の直近投稿は検索結果に出てこず",
+      "follower_count": "本日未再検証（前回9/20確認値: 約2,756人）",
+      "recent_post_engagement": "不明（WebSearchでは取得不可）",
+      "sources": ["https://x.com/flove_fxtrader/status/1939806153942425791"]
+    },
+    {
+      "type": "account",
+      "handle": "tsubasa_yozawa",
+      "name": "与沢翼",
+      "found": "検索結果内に451,296フォロワーという記載あり（出典の信頼度は中: Twitter系プロフィール集約ページ）。直近投稿本文・エンゲージメントは未確認",
+      "follower_count": "約45.1万人（本日の検索結果に基づく、単一ソースのため要再確認）",
+      "recent_post_engagement": "不明（WebSearchでは取得不可）",
+      "sources": ["https://twitter.com/tsubasa_yozawa"]
+    },
+    {
+      "type": "account",
+      "handle": "PeterLBrandt",
+      "name": "Peter Brandt",
+      "found": "プロフィール・経歴情報のみ（1981年から続く古典的チャート分析家）。直近のゴールド関連投稿本文・エンゲージメントは検索結果から確認できず",
+      "follower_count": "本日未再検証（前回9/20確認値: 約57.5万人）",
+      "recent_post_engagement": "不明（WebSearchでは取得不可）",
+      "sources": ["https://x.com/PeterLBrandt"]
+    },
+    {
+      "type": "account",
+      "handle": "Tradingnrg",
+      "name": "Lior Cohen",
+      "found": "検索結果によると @TradingNrg のX上のフォロワー数は612人（2020年11月開設）との記載あり。CLAUDE.mdの『相場コメントで影響力あり』という前提と数値が大きく食い違うため要注意。ブログ(tradingnrg.com)自体は別に運営されている可能性あり、アカウントとブログの同一性を含め未確認",
+      "follower_count": "612人（本日の検索結果、単一ソース・要再確認・前回想定と乖離あり）",
+      "recent_post_engagement": "不明（WebSearchでは取得不可）",
+      "sources": ["https://x.com/TradingNrg", "https://tradingnrg.com/about/"]
+    },
+    {
+      "type": "topic",
+      "category": "FX",
+      "found": "個別のバイラル投稿は特定できず。ドル円相場の一般的なニュース記事が中心。ドル円: 9/21朝6時時点 156.68〜156.96円、前日比+0.80円。FOMC(9/15-16)・日銀(9/18)の利上げ通過後も円安基調継続",
+      "sources": ["https://www.oanda.jp/lab-education/market_news/kn_2026092102000011/", "https://www.gaitame.com/media/entry/2026/09/20/060200"]
+    },
+    {
+      "type": "topic",
+      "category": "ゴールド",
+      "found": "個別のバイラル投稿は特定できず。価格データに矛盾あり: 記事は『9/18は前日比+419円の続伸で国内小売23,818円/g』としつつ、別箇所で『9月初旬の急落時に24,721円/gまで反落』とも記載しており、23,818円という9/18の水準が9月初旬の下落時点の水準より低いという矛盾がある。数値の整合性が取れるまで投稿での使用は保留",
+      "sources": ["https://www.otakaraya.jp/contents/gold-platinum/gold/gold-souba/kinsouba-sekaijousei-doukou-kaisetsu/"]
+    },
+    {
+      "type": "topic",
+      "category": "仮想通貨",
+      "found": "取得できたのは『jpyforecast』という価格予想サイトの推測値（9/21の予想レンジ: 1,076.8万円〜1,238.9万円、中心値1,157.8万円）のみで、実際の取引価格ではない。予想値を実勢価格として扱うのは不適切なため、本日は検証済みのBTC実勢価格を確保できていない",
+      "sources": ["https://jpyforecast.com/..."]
+    },
+    {
+      "type": "topic",
+      "category": "マクロ経済",
+      "found": "FOMC: 9/15-16開催、政策金利を3.75-4.00%に引き上げ（9/20分析と整合・二重確認済み）。日銀: 公表予定ページのみで今週分の具体的な決定内容は検索結果から確認できず（前回9/20分析にあった『日銀9/18利上げ1.25%』は本日は再確認できていない）。雇用統計: 8月分は市場予想を上回る強さで9月利上げ確率を押し上げたとの記載",
+      "sources": ["https://www.oanda.jp/lab-education/market_news/fomc-sep-2026-preview/", "https://www.boj.or.jp/about/calendar/index.htm"]
+    },
+    {
+      "type": "topic",
+      "category": "トレード心理",
+      "found": "個別のバイラル投稿は特定できず。一般的な解説記事のみ（損切りできない心理＝損失回避バイアス、OCO注文の活用、睡眠不足時の判断力低下など）。切り口としては既存テーマ群(TM-*, RB-*)と重複するものが多い",
+      "sources": ["https://multiframefx.com/...", "https://fxmentalblog.com/2026/05/12/..."]
+    }
+  ]
+}

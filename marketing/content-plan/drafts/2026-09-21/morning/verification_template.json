@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-09-21T08:06:33.645878+09:00",
+  "protocol": "CLAUDE.md §3 検証プロトコル（1〜6）に準拠",
+  "instruction": "各 fact_claims の項目を独立した2つ以上のソースで裏取りし、verified フィールドと sources フィールドを埋めてください。すべての項目が verified=true になるまで下書きを修正し、完了後に verification_log.md として保存してください。",
+  "posts": [
+    {
+      "index": 1,
+      "body_preview": "```\n■ 材料通過後の相場でやりがちなこと\n\n先日のFOMCで利上げが決まった\n3.75%〜4.00%\nこれでイベントは通過した\n\nでもここからが本当は要注意...",
+      "fact_claims": [
+        {
+          "claim": "先日のFOMCで利上げが決まった",
+          "verified": true,
+          "sources": [
+            "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "https://www.nikkei.com/article/DGXZQOGN14A180U6A910C2000000/",
+            "https://www.cnbc.com/2026/09/16/fed-rate-decision-september-2026.html"
+          ],
+          "notes": "2026-09-16開催のFOMCで0.25%利上げを12-0で決定（約3年ぶり）。FRB公式発表と独立2ソースで一致"
+        },
+        {
+          "claim": "3.75%〜4.00%",
+          "verified": true,
+          "sources": [
+            "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+            "https://www.oanda.jp/lab-education/market_news/fomc-sep-2026-review/"
+          ],
+          "notes": "引き上げ後の誘導目標レンジ3.75%-4.00%が一次ソース・独立ソースで数値一致"
+        },
+        {
+          "claim": "◽️ 大きな発表が終わった安心感でポジションが大きくなる",
+          "verified": null,
+          "sources": [],
+          "notes": "客観的事実主張ではなく行動観察・意見の記述のため検証対象外（N/A）"
+        }
+      ],
+      "style_check": {
+        "uses_boku": true,
+        "no_kuten": true,
+        "uses_checkbox": true,
+        "no_closing_phrase": true
+      },
+      "overall_verified": true
+    }
+  ]
+}
