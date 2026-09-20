@@ -27,14 +27,23 @@ def load_draft(date_str: str, slot: str) -> str:
 
 def post_tweet(text: str, credentials: dict) -> dict:
     import tweepy
+    print(f"DEBUG: api_key={credentials['api_key'][:8]}... len={len(credentials['api_key'])}", file=sys.stderr)
+    print(f"DEBUG: access_token={credentials['access_token'][:8]}... len={len(credentials['access_token'])}", file=sys.stderr)
     client = tweepy.Client(
         consumer_key=credentials["api_key"],
         consumer_secret=credentials["api_secret"],
         access_token=credentials["access_token"],
         access_token_secret=credentials["access_token_secret"],
     )
-    response = client.create_tweet(text=text)
-    return {"data": {"id": response.data["id"]}}
+    try:
+        response = client.create_tweet(text=text)
+        return {"data": {"id": response.data["id"]}}
+    except tweepy.errors.Unauthorized as e:
+        print(f"401 Unauthorized. Response: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
+        raise
+    except tweepy.errors.Forbidden as e:
+        print(f"403 Forbidden. Response: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
+        raise
 
 
 def main():
