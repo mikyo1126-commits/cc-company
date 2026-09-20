@@ -1,0 +1,311 @@
+name: "@hajime_cp draft generate"
+
+on:
+  schedule:
+    # 朝: 21:00 UTC = 6:00 JST
+    - cron: '0 21 * * *'
+    # 昼: 03:00 UTC = 12:00 JST
+    - cron: '0 3 * * *'
+    # 晩: 09:00 UTC = 18:00 JST
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: '投稿スロット (morning/noon/evening)'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - noon
+          - evening
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  draft-generate:
+    name: draft-generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: install-deps
+        run: pip install -r requirements.txt
+
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: install-claude-cli
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: validate-token
+        id: token_check
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set in GitHub Secrets"
+            exit 1
+          fi
+          echo "::notice::OAuth token validated"
+
+      - name: determine-slot
+        id: slot
+        run: |
+          DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          echo "DATE=$DATE" >> $GITHUB_ENV
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SLOT="${{ github.event.inputs.slot }}"
+          else
+            UTC_HOUR=$(date -u +%H)
+            case "$UTC_HOUR" in
+              21) SLOT="morning" ;;
+              03) SLOT="noon" ;;
+              09) SLOT="evening" ;;
+              *)  SLOT="morning" ;;
+            esac
+          fi
+
+          echo "SLOT=$SLOT" >> $GITHUB_ENV
+          case "$SLOT" in
+            morning) SLOT_LABEL="朝" ;;
+            noon)    SLOT_LABEL="昼" ;;
+            evening) SLOT_LABEL="晩" ;;
+          esac
+          echo "SLOT_LABEL=$SLOT_LABEL" >> $GITHUB_ENV
+          echo "::notice::Slot: $SLOT ($SLOT_LABEL)"
+
+      - name: step1-collect-plan
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          mkdir -p "$SLOT_DIR"
+          python3 workflow/01_collect_trends.py --date "$DATE" --slot "$SLOT"
+
+      - name: step2-analyze-trends
+        id: step2
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          {
+            cat workflow/prompts/02_analyze_trends.md
+            printf '\n\n---\n## Data\n\n'
+            printf '### search_plan.json\n```json\n'
+            cat "$SLOT_DIR/search_plan.json"
+            printf '\n```\n\n'
+            printf '### existing_themes.json\n```json\n'
+            cat "$SLOT_DIR/existing_themes.json"
+            printf '\n```\n'
+          } > /tmp/prompt_step2.txt
+          set +e
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step2.txt 2>&1)
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::step2 failed"
+            echo "$OUTPUT"
+            exit $EXIT_CODE
+          fi
+          echo "$OUTPUT" > "$SLOT_DIR/raw_trends.md"
+          echo "::notice::step2 done"
+
+      - name: step3-generate-draft
+        id: step3
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          {
+            cat workflow/prompts/03_generate_single_draft.md
+            printf '\n\n---\n## Data\n\n'
+            printf '### 投稿スロット\n'
+            printf "スロット: %s（%s）\n" "$SLOT" "$SLOT_LABEL"
+            printf '\n### raw_trends.md\n'
+            cat "$SLOT_DIR/raw_trends.md"
+            printf '\n\n### existing_themes.json\n```json\n'
+            cat "$SLOT_DIR/existing_themes.json"
+            printf '\n```\n\n'
+            printf '### feedback.md（はじめさんからの改善フィードバック）\n'
+            cat workflow/feedback.md
+          } > /tmp/prompt_step3.txt
+          set +e
+          OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step3.txt 2>&1)
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::step3 failed"
+            echo "$OUTPUT"
+            exit $EXIT_CODE
+          fi
+          echo "$OUTPUT" > "$SLOT_DIR/draft.md"
+          echo "::notice::step3 done"
+
+      - name: step4-verify-template
+        run: python3 workflow/03_verify_drafts.py --date "$DATE" --slot "$SLOT"
+
+      - name: step5-verify-and-fix
+        id: step5
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          SLOT_DIR="marketing/content-plan/drafts/$DATE/$SLOT"
+          MAX_ATTEMPTS=3
+          VERIFIED=false
+
+          for ATTEMPT in 1 2 3; do
+            echo "::notice::Verification attempt $ATTEMPT/$MAX_ATTEMPTS"
+
+            # 検証テンプレートを最新の draft.md から再生成
+            python3 workflow/03_verify_drafts.py --date "$DATE" --slot "$SLOT"
+
+            # 検証実行
+            {
+              cat workflow/prompts/05_verify_facts.md
+              printf '\n\n---\n## Data\n\n'
+              printf '### draft.md\n'
+              cat "$SLOT_DIR/draft.md"
+              printf '\n\n### verification_template.json\n```json\n'
+              cat "$SLOT_DIR/verification_template.json"
+              printf '\n```\n'
+            } > /tmp/prompt_step5.txt
+
+            set +e
+            OUTPUT=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_step5.txt 2>&1)
+            EXIT_CODE=$?
+            set -e
+
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "::error::step5 claude call failed on attempt $ATTEMPT"
+              echo "$OUTPUT"
+              exit $EXIT_CODE
+            fi
+
+            echo "$OUTPUT" > "$SLOT_DIR/verification_log.md"
+
+            # ❌ が残っているか確認
+            if ! grep -q "^- ❌" "$SLOT_DIR/verification_log.md"; then
+              echo "::notice::All facts verified on attempt $ATTEMPT"
+              VERIFIED=true
+              break
+            fi
+
+            echo "::warning::Verification issues found on attempt $ATTEMPT — running fix..."
+
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              # 修正ステップ: 検証ログを元に draft.md を修正
+              {
+                cat workflow/prompts/06_fix_draft.md
+                printf '\n\n---\n## 現在の下書き（draft.md）\n\n'
+                cat "$SLOT_DIR/draft.md"
+                printf '\n\n---\n## 検証ログ（verification_log.md）\n\n'
+                cat "$SLOT_DIR/verification_log.md"
+              } > /tmp/prompt_fix.txt
+
+              set +e
+              FIXED=$(claude --print --dangerously-skip-permissions - < /tmp/prompt_fix.txt 2>&1)
+              FIX_EXIT=$?
+              set -e
+
+              if [ $FIX_EXIT -ne 0 ]; then
+                echo "::error::Fix step failed on attempt $ATTEMPT"
+                echo "$FIXED"
+                exit $FIX_EXIT
+              fi
+
+              echo "$FIXED" > "$SLOT_DIR/draft.md"
+              echo "::notice::Draft updated by fix step (attempt $ATTEMPT)"
+            fi
+          done
+
+          if [ "$VERIFIED" = "false" ]; then
+            echo "::error::Fact verification failed after $MAX_ATTEMPTS attempts. Blocking commit."
+            echo "::error::Review verification_log.md:"
+            cat "$SLOT_DIR/verification_log.md"
+            exit 1
+          fi
+
+      - name: commit-draft
+        run: |
+          git config user.name "hajime-bot[workflow]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "marketing/content-plan/drafts/$DATE/$SLOT/"
+          if git diff --cached --quiet; then
+            echo "::notice::nothing to commit"
+            exit 0
+          fi
+          git commit -m "draft: [$DATE/$SLOT] draft verified and ready"
+          git push
+
+      - name: notify-ready
+        run: |
+          echo "::notice::Draft saved to marketing/content-plan/drafts/$DATE/$SLOT/draft.md"
+          echo "::notice::All facts verified. Post will be published in 1 hour by x-post-publish workflow"
+
+      - name: notify-token-expiry
+        if: failure()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          STEP2_RESULT: ${{ steps.step2.outcome }}
+          STEP3_RESULT: ${{ steps.step3.outcome }}
+          STEP5_RESULT: ${{ steps.step5.outcome }}
+        with:
+          script: |
+            const failedSteps = ['step2', 'step3', 'step5']
+              .filter(s => process.env[`${s.toUpperCase()}_RESULT`] === 'failure');
+            if (failedSteps.length === 0) return;
+
+            const now = new Date().toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'});
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'token-expired',
+            });
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body: 'Workflow failed again at ' + now + ' JST. Steps: ' + failedSteps.join(', '),
+              });
+              return;
+            }
+            const bodyLines = [
+              '## Claude OAuth token renewal required',
+              '',
+              'Failed at: ' + now + ' JST',
+              'Failed steps: ' + failedSteps.join(', '),
+              '',
+              '### Steps to fix',
+              '1. Run `claude setup-token` locally and copy the token',
+              '2. Go to Settings > Secrets > CLAUDE_CODE_OAUTH_TOKEN > Update',
+              '3. Re-run the workflow from the Actions tab',
+              '4. Close this issue',
+              '',
+              'Note: Use CLAUDE_CODE_OAUTH_TOKEN, not ANTHROPIC_API_KEY',
+            ];
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '[ACTION REQUIRED] Claude OAuth token expired (' + now + ')',
+              labels: ['token-expired', 'bot'],
+              body: bodyLines.join('\n'),
+            });

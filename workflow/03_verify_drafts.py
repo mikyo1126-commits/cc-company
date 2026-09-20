@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 Step 3: 検証チェックリスト生成・検証ログ保存スクリプト
-- drafts.md から各投稿を読み込み、事実主張を抽出するテンプレートを生成する
+- draft.md から投稿を読み込み、事実主張を抽出するテンプレートを生成する
 - Claude が WebSearch で裏取りした後に検証ログを保存する
 - CLAUDE.md の検証プロトコル（1〜6）に完全準拠
 
 Usage:
-    python3 workflow/03_verify_drafts.py --date 2026-09-16
+    python3 workflow/03_verify_drafts.py --date 2026-09-16 --slot morning
+    python3 workflow/03_verify_drafts.py --date 2026-09-16  # 旧形式（後方互換）
 """
 
 import json
@@ -30,21 +31,23 @@ def get_today_str(date_override: str | None = None) -> str:
 
 def parse_drafts(drafts_path: Path) -> list[dict]:
     """
-    drafts.md から各投稿ブロックを抽出する。
-    フォーマット想定:
-        ## 投稿1
-        （本文）
-        ---
-        ## 投稿2
-        ...
+    draft.md（単一投稿）または drafts.md（複数投稿）から投稿ブロックを抽出する。
+    draft.md: 本文がそのまま入っている（見出しなし）
+    drafts.md: ## 投稿N 区切り形式
     """
     if not drafts_path.exists():
         return []
 
     text = drafts_path.read_text(encoding="utf-8")
+
+    # 単一投稿ファイル（draft.md）: ## 投稿N 見出しがなければ全体を1投稿として扱う
+    if drafts_path.name == "draft.md" or "## 投稿" not in text:
+        body = text.strip()
+        return [{"index": 1, "body": body}]
+
     blocks = re.split(r"\n## 投稿\d+", text)
     drafts = []
-    for i, block in enumerate(blocks[1:], start=1):  # 最初の空ブロックをスキップ
+    for i, block in enumerate(blocks[1:], start=1):
         body = block.strip().rstrip("-").strip()
         drafts.append({"index": i, "body": body})
     return drafts
@@ -166,14 +169,22 @@ def save_verification_log_md(out_dir: Path, log: dict, date_str: str) -> Path:
 def main():
     parser = argparse.ArgumentParser(description="検証チェックリストのテンプレートを生成する")
     parser.add_argument("--date", help="実行日付 YYYY-MM-DD（省略時は今日）")
+    parser.add_argument("--slot", choices=["morning", "noon", "evening"],
+                        help="投稿スロット（指定時はスロット別ディレクトリを使用）")
     args = parser.parse_args()
 
     date_str = get_today_str(args.date)
-    out_dir  = DRAFTS_DIR / date_str
 
-    print(f"[03_verify_drafts] 実行日付: {date_str}")
+    if args.slot:
+        out_dir = DRAFTS_DIR / date_str / args.slot
+        drafts_filename = "draft.md"
+    else:
+        out_dir = DRAFTS_DIR / date_str
+        drafts_filename = "drafts.md"
 
-    drafts_path = out_dir / "drafts.md"
+    print(f"[03_verify_drafts] 実行日付: {date_str}" + (f" / slot: {args.slot}" if args.slot else ""))
+
+    drafts_path = out_dir / drafts_filename
     if not drafts_path.exists():
         print(f"ERROR: {drafts_path} が見つかりません。先に下書きを生成してください。", file=sys.stderr)
         sys.exit(1)
