@@ -38,6 +38,12 @@ def post_tweet(text: str, credentials: dict) -> dict:
         access_token_secret=credentials["access_token_secret"],
     )
     try:
+        me = client.get_me()
+        print(f"DEBUG: auth OK — user_id={me.data.id} username={me.data.username}", file=sys.stderr)
+    except tweepy.errors.Unauthorized as e:
+        print(f"DEBUG: get_me 401 — credentials invalid: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
+        raise
+    try:
         response = client.create_tweet(text=text)
         return {"data": {"id": response.data["id"]}}
     except tweepy.errors.Unauthorized as e:
