@@ -28,9 +28,9 @@ def load_draft(date_str: str, slot: str) -> str:
 def post_tweet(text: str, credentials: dict) -> dict:
     import tweepy
     print(f"DEBUG: api_key={credentials['api_key'][:8]}... len={len(credentials['api_key'])}", file=sys.stderr)
-    print(f"DEBUG: api_secret len={len(credentials['api_secret'])}", file=sys.stderr)
+    print(f"DEBUG: api_secret={credentials['api_secret'][:8]}... len={len(credentials['api_secret'])}", file=sys.stderr)
     print(f"DEBUG: access_token={credentials['access_token'][:8]}...{credentials['access_token'][-6:]} len={len(credentials['access_token'])}", file=sys.stderr)
-    print(f"DEBUG: access_token_secret len={len(credentials['access_token_secret'])}", file=sys.stderr)
+    print(f"DEBUG: access_token_secret={credentials['access_token_secret'][:8]}... len={len(credentials['access_token_secret'])}", file=sys.stderr)
     client = tweepy.Client(
         consumer_key=credentials["api_key"],
         consumer_secret=credentials["api_secret"],
