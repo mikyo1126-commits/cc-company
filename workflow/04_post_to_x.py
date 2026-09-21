@@ -27,30 +27,6 @@ def load_draft(date_str: str, slot: str) -> str:
 
 def post_tweet(text: str, credentials: dict) -> dict:
     import tweepy
-    import requests
-    import base64
-    print(f"DEBUG: api_key={credentials['api_key'][:8]}... len={len(credentials['api_key'])}", file=sys.stderr)
-    print(f"DEBUG: api_secret={credentials['api_secret'][:8]}... len={len(credentials['api_secret'])}", file=sys.stderr)
-    print(f"DEBUG: access_token={credentials['access_token'][:8]}...{credentials['access_token'][-6:]} len={len(credentials['access_token'])}", file=sys.stderr)
-    print(f"DEBUG: access_token_secret={credentials['access_token_secret'][:8]}... len={len(credentials['access_token_secret'])}", file=sys.stderr)
-
-    # Bearer Token test: verify Consumer Key/Secret independently of Access Token
-    encoded = base64.b64encode(
-        f"{credentials['api_key']}:{credentials['api_secret']}".encode("ascii")
-    ).decode("ascii")
-    bt_resp = requests.post(
-        "https://api.twitter.com/oauth2/token",
-        headers={
-            "Authorization": f"Basic {encoded}",
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        },
-        data="grant_type=client_credentials",
-    )
-    if bt_resp.status_code == 200:
-        print(f"DEBUG: Consumer Key/Secret VALID — bearer token obtained", file=sys.stderr)
-    else:
-        print(f"DEBUG: Consumer Key/Secret INVALID — {bt_resp.status_code}: {bt_resp.text}", file=sys.stderr)
-
     client = tweepy.Client(
         consumer_key=credentials["api_key"],
         consumer_secret=credentials["api_secret"],
@@ -58,19 +34,13 @@ def post_tweet(text: str, credentials: dict) -> dict:
         access_token_secret=credentials["access_token_secret"],
     )
     try:
-        me = client.get_me()
-        print(f"DEBUG: auth OK — user_id={me.data.id} username={me.data.username}", file=sys.stderr)
-    except tweepy.errors.Unauthorized as e:
-        print(f"DEBUG: get_me 401 — credentials invalid: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
-        raise
-    try:
         response = client.create_tweet(text=text)
         return {"data": {"id": response.data["id"]}}
     except tweepy.errors.Unauthorized as e:
-        print(f"401 Unauthorized. Response: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
+        print(f"401 Unauthorized: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
         raise
     except tweepy.errors.Forbidden as e:
-        print(f"403 Forbidden. Response: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
+        print(f"403 Forbidden: {e.response.text if hasattr(e, 'response') else str(e)}", file=sys.stderr)
         raise
 
 
