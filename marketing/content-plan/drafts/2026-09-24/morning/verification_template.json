@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-09-23T09:19:15.741624+09:00",
+  "protocol": "CLAUDE.md §3 検証プロトコル（1〜6）に準拠",
+  "instruction": "各 fact_claims の項目を独立した2つ以上のソースで裏取りし、verified フィールドと sources フィールドを埋めてください。すべての項目が verified=true になるまで下書きを修正し、完了後に verification_log.md として保存してください。",
+  "posts": [
+    {
+      "index": 1,
+      "body_preview": "FOMCも日銀も終わった\n\n先週は両方のイベントが重なって動きが大きかった分、今週はどこか別のモードになってる気がする\n\n方向を決める大きな材料がない週は、新規...",
+      "fact_claims": [
+        {
+          "claim": "FOMCも日銀も終わった",
+          "verified": null,
+          "sources": [],
+          "notes": ""
+        }
+      ],
+      "style_check": {
+        "uses_boku": null,
+        "no_kuten": null,
+        "uses_checkbox": null,
+        "no_closing_phrase": null
+      },
+      "overall_verified": null
+    }
+  ]
+}
