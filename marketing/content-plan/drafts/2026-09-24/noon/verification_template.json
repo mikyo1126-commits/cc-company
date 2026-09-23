@@ -1,0 +1,18 @@
+{
+  "draft_slot": "2026-09-24/noon",
+  "claims": [
+    {
+      "id": "C1",
+      "text": "大きなイベントが終わった後の週（FOMC 9/16、日銀 9/18）",
+      "type": "factual",
+      "requires_verification": true
+    }
+  ],
+  "style_checks": [
+    "一人称「僕」使用",
+    "文末句点なし",
+    "■◽️箇条書き不使用",
+    "定型句締めなし",
+    "直近投稿との重複なし"
+  ]
+}

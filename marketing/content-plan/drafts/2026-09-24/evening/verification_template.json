@@ -1,0 +1,25 @@
+{
+  "draft_slot": "2026-09-24/evening",
+  "claims": [
+    {
+      "id": "C1",
+      "text": "今週みたいに材料が少ない相場（イベント通過後の週）",
+      "type": "contextual",
+      "requires_verification": true
+    },
+    {
+      "id": "C2",
+      "text": "「ドル円は上」という見立て",
+      "type": "hypothetical_example",
+      "requires_verification": false,
+      "note": "仮定の例として使用、特定の相場予測ではない"
+    }
+  ],
+  "style_checks": [
+    "一人称「僕」使用",
+    "文末句点なし",
+    "■◽️箇条書き不使用",
+    "定型句締めなし",
+    "直近投稿との重複なし"
+  ]
+}
