@@ -1,0 +1,20 @@
+name: "test dispatch"
+
+on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'slot'
+        required: true
+        default: 'morning'
+        type: choice
+        options:
+          - morning
+          - noon
+          - evening
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "workflow_dispatch works"
