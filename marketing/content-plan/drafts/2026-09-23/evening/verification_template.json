@@ -1,0 +1,26 @@
+{
+  "generated_at": "2026-09-23T09:08:09.122460+09:00",
+  "protocol": "CLAUDE.md §3 検証プロトコル（1〜6）に準拠",
+  "instruction": "各 fact_claims の項目を独立した2つ以上のソースで裏取りし、verified フィールドと sources フィールドを埋めてください。すべての項目が verified=true になるまで下書きを修正し、完了後に verification_log.md として保存してください。",
+  "posts": [
+    {
+      "index": 1,
+      "body_preview": "10月FOMCに向けて、市場は追加利上げを五分五分で織り込んでる\n\n五分五分の状況が一番扱いにくいと思う\n\n完全に織り込んでいれば、実際に上げても動かない\n逆な...",
+      "fact_claims": [
+        {
+          "claim": "10月FOMCに向けて、市場は追加利上げを五分五分で織り込んでる",
+          "verified": null,
+          "sources": [],
+          "notes": ""
+        }
+      ],
+      "style_check": {
+        "uses_boku": null,
+        "no_kuten": null,
+        "uses_checkbox": null,
+        "no_closing_phrase": null
+      },
+      "overall_verified": null
+    }
+  ]
+}

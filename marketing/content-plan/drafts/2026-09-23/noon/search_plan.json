@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-09-23T09:05:43.864857+09:00",
+  "target_date": "2026-09-23",
+  "instruction": "以下の queries を順番に WebSearch で実行し、各結果を results フィールドに追記してから raw_trends.json として保存してください。「なぜ伸びているか」の分析は results 収集後に Claude 自身が行います。",
+  "queries": [
+    {
+      "type": "account",
+      "handle": "fuuta_fx_trader",
+      "name": "スキャトレふうた",
+      "lang": "ja",
+      "search_query": "from:fuuta_fx_trader",
+      "note": "FX・株、6万人超、初心者向け解説に強い"
+    },
+    {
+      "type": "account",
+      "handle": "flove_fxtrader",
+      "name": "えふらぶ",
+      "lang": "ja",
+      "search_query": "from:flove_fxtrader",
+      "note": "ユーロドル・ドル円・ゴールドのデイトレ、リアルタイム相場観"
+    },
+    {
+      "type": "account",
+      "handle": "tsubasa_yozawa",
+      "name": "与沢翼",
+      "lang": "ja",
+      "search_query": "from:tsubasa_yozawa",
+      "note": "大型アカウント、スキャルピング・相場解説"
+    },
+    {
+      "type": "account",
+      "handle": "PeterLBrandt",
+      "name": "Peter Brandt",
+      "lang": "en",
+      "search_query": "from:PeterLBrandt",
+      "note": "ゴールド・コモディティのテクニカル分析、79万人超"
+    },
+    {
+      "type": "account",
+      "handle": "Tradingnrg",
+      "name": "Lior Cohen",
+      "lang": "en",
+      "search_query": "from:Tradingnrg",
+      "note": "ゴールド・シルバー・原油の相場コメント"
+    },
+    {
+      "type": "topic",
+      "category": "FX",
+      "search_query": "FX ドル円 -filter:retweets",
+      "note": "直近24h以内に伸びている投稿を広域探索"
+    },
+    {
+      "type": "topic",
+      "category": "ゴールド",
+      "search_query": "ゴールド 金価格 -filter:retweets",
+      "note": "直近24h以内に伸びている投稿を広域探索"
+    },
+    {
+      "type": "topic",
+      "category": "仮想通貨",
+      "search_query": "ビットコイン BTC -filter:retweets",
+      "note": "直近24h以内に伸びている投稿を広域探索"
+    },
+    {
+      "type": "topic",
+      "category": "マクロ経済",
+      "search_query": "FOMC 日銀 雇用統計 -filter:retweets",
+      "note": "直近24h以内に伸びている投稿を広域探索"
+    },
+    {
+      "type": "topic",
+      "category": "トレード心理",
+      "search_query": "トレード 損切り メンタル -filter:retweets",
+      "note": "直近24h以内に伸びている投稿を広域探索"
+    }
+  ],
+  "results": []
+}

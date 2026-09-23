@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-09-23T09:08:09.087192+09:00",
+  "protocol": "CLAUDE.md §3 検証プロトコル（1〜6）に準拠",
+  "instruction": "各 fact_claims の項目を独立した2つ以上のソースで裏取りし、verified フィールドと sources フィールドを埋めてください。すべての項目が verified=true になるまで下書きを修正し、完了後に verification_log.md として保存してください。",
+  "posts": [
+    {
+      "index": 1,
+      "body_preview": "日銀が利上げを決定した週だった\n\n「利上げ→円高」と思ってエントリーした人は多いと思う\n実際は逆に動いた\n\n市場の読みは単純だった\n「今回の利上げはハト派的で、...",
+      "fact_claims": [
+        {
+          "claim": "日銀が利上げを決定した週だった",
+          "verified": null,
+          "sources": [],
+          "notes": ""
+        },
+        {
+          "claim": "FRBとの金利差はまだ圧倒的に大きい",
+          "verified": null,
+          "sources": [],
+          "notes": ""
+        },
+        {
+          "claim": "日銀が一回動いた程度では、その構図は変わらない",
+          "verified": null,
+          "sources": [],
+          "notes": ""
+        }
+      ],
+      "style_check": {
+        "uses_boku": null,
+        "no_kuten": null,
+        "uses_checkbox": null,
+        "no_closing_phrase": null
+      },
+      "overall_verified": null
+    }
+  ]
+}
