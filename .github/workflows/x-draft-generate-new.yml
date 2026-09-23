@@ -1,13 +1,6 @@
 name: "@hajime_cp draft generate v2"
 
 on:
-  schedule:
-    # 朝: 21:00 UTC = 6:00 JST
-    - cron: '0 21 * * *'
-    # 昼: 03:00 UTC = 12:00 JST
-    - cron: '0 3 * * *'
-    # 晩: 09:00 UTC = 18:00 JST
-    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       slot:
