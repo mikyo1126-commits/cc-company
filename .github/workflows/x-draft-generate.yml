@@ -74,12 +74,11 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             SLOT="${{ github.event.inputs.slot }}"
           else
-            UTC_HOUR=$(date -u +%H)
-            case "$UTC_HOUR" in
-              21) SLOT="morning" ;;
-              03) SLOT="noon" ;;
-              09) SLOT="evening" ;;
-              *)  SLOT="morning" ;;
+            case "${{ github.event.schedule }}" in
+              "0 21 * * *") SLOT="morning" ;;
+              "0 3 * * *")  SLOT="noon" ;;
+              "0 9 * * *")  SLOT="evening" ;;
+              *)             SLOT="morning" ;;
             esac
           fi
 
