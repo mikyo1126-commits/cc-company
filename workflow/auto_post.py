@@ -16,9 +16,12 @@ import sys
 import subprocess
 import tweepy
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
 SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩"}
+ROOT_DIR = Path(__file__).parent.parent
+INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
 
 PROMPT = """\
 あなたは @hajime_cp（FX・ゴールド・仮想通貨トレーダー）のX運用エージェントです。
@@ -28,8 +31,16 @@ PROMPT = """\
 
 ## ステップ1: 直近ニュースをWebSearchで調べる
 
-WebSearch で直近2〜3時間のFX・ゴールド・BTC・マクロ関連の動きを調べてください。
-調査したら、数値を含む情報は**独立した2つ以上のソースで裏取りすること**。
+以下の優先順位で調べてください。
+
+**優先1（最重要）: ビットコイン**
+BTCの直近2〜3時間の値動き、注目される価格帯、テクニカルの節目、マーケットの反応。
+過去の分析で、BTCに関する投稿がエンゲージメントTOP10を独占している。
+
+**優先2: ゴールド・FX・マクロ**
+BTCで書けるネタがない場合にのみ選ぶ。
+
+数値を使う場合は**独立した2つ以上のソースで裏取りすること**。
 裏取りできなかった数値・情報は使わない。
 
 ---
@@ -39,24 +50,32 @@ WebSearch で直近2〜3時間のFX・ゴールド・BTC・マクロ関連の動
 ### 文体ルール（必須）
 - 一人称は「僕」
 - 文末に句点「。」を付けない
-- 箇条書きは「◽️」を使う（「・」「-」は使わない）
-- 見出しは「■」を使う
+- **段落分けスタイルで書く**（空行で段落を区切る。箇条書き・見出しは使わない）
 - 「ではまた明日」などの定型締めは禁止
-- AI的な「■見出し＋◽️箇条書き3点セット」の構造を多用しない
 - 思考の流れが自然に続く文章にする
+
+### 構成の参考（高エンゲージメント投稿のパターン）
+1. 「ビットコイン」等で始まるトピック提示
+2. 直近の値動き・状況を端的に描写
+3. 「なぜそうなったか」「何が起きているか」の解説（独自の切り口）
+4. 「これからどう見るか」「今日の判断ポイント」
+
+### 目標仕様
+- **文字数: 100〜160文字**
+- **行数: 4〜6行**（段落間の空行も含む）
 
 ### 内容ルール
 - リアルタイム市場価格（$5,602など）は書かない
-  → 代わりに「今年の高値から2割落ちた」「先月比で大きく動いた」などの表現を使う
+  → 代わりに「月足の短期線まで急騰」「三尊のネックラインを試す」などの表現を使う
 - FOMCの政策金利など公式決定値はOK（リアルタイム変動しない）
 - 確定的な価格予測・断定的な投資推奨はしない
 - @hajime_cp 独自の切り口・経験・見方を通した内容にする
 - 宗教・政治・他トレーダーへの批判はNG
 
 ### スロット別の傾向（参考）
-- 朝: マーケット開始前の注目ポイント・今日意識すべきこと
-- 昼: 午前の動きの振り返り・心理面・マクロ解説
-- 晩: 1日の振り返り・翌日の見どころ・中期的視点
+- 朝: 今日意識すべき値動きの焦点・トレードの準備
+- 昼: 午前の動きの解説・心理面・チャートの読み方
+- 晩: 1日の振り返り・明日の注目点
 
 ### 本日のコンテキスト
 - 日時: {date}（{slot_label}）
@@ -67,9 +86,17 @@ WebSearch で直近2〜3時間のFX・ゴールド・BTC・マクロ関連の動
 """
 
 
-def generate_post(date_str: str, slot: str) -> str:
+def build_prompt(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS.get(slot, "朝")
-    prompt = PROMPT.format(date=date_str, slot=slot, slot_label=slot_label)
+    base = PROMPT.format(date=date_str, slot=slot, slot_label=slot_label)
+    if INSIGHTS_PATH.exists():
+        insights = INSIGHTS_PATH.read_text(encoding="utf-8")
+        base += f"\n\n---\n\n## 過去分析インサイト（毎週更新）\n\n{insights}"
+    return base
+
+
+def generate_post(date_str: str, slot: str) -> str:
+    prompt = build_prompt(date_str, slot)
 
     result = subprocess.run(
         ["claude", "--print", "--dangerously-skip-permissions", "-"],

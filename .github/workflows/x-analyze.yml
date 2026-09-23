@@ -1,6 +1,9 @@
-name: "投稿分析"
+name: "投稿分析（週次）"
 
 on:
+  schedule:
+    # 毎週月曜 9:00 JST (0:00 UTC)
+    - cron: '0 0 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -9,10 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -28,3 +33,24 @@ jobs:
           TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
           TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
         run: python3 workflow/analyze_posts.py
+
+      - name: update-insights
+        env:
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        run: python3 workflow/update_insights.py
+
+      - name: commit-insights
+        run: |
+          git config user.name "hajime-bot[workflow]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workflow/insights.md
+          if git diff --cached --quiet; then
+            echo "::notice::insights.md に変更なし"
+            exit 0
+          fi
+          DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          git commit -m "analysis: [$DATE] 週次投稿分析・インサイト更新"
+          git push
