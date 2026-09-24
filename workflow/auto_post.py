@@ -233,24 +233,68 @@ def call_claude(prompt: str, timeout: int = 300) -> str:
     return result.stdout.strip()
 
 
+MAX_POST_CHARS = 250
+
 FORBIDDEN_PATTERNS = [
-    (r"https?://|www\.", "URL"),
-    (r"^\s*[-=_*]{3,}\s*$", "区切り線"),
+    (r"https?://|www\.|\.com|\.jp", "URL"),
+    (r"^\s*[-=_*―─]{3,}\s*$", "区切り線"),
     (r"^\s*#", "見出し"),
-    (r"```|\*\*|<|>", "マークダウン/タグ"),
-    (r"投稿文|修正後|修正前|検証|メモ|出典|ソース|参照|注[:：]|※|Source|以下", "メタ文言"),
+    (r"```|\*\*|<|>|\[|\]", "マークダウン/タグ"),
+    (r"^[^\n]{0,20}[:：]\s*$", "ラベル行"),
+    (r"投稿文|修正|訂正|改訂|検証|確認済|未確認|要確認|メモ|出典|ソース|参照|注[:：]|※|補足|以下|下書き|ドラフト|案[0-9０-９]|バージョン|文字数", "メタ文言"),
 ]
+
+# 投稿に出てきてよい英字（これ以外の英単語が入っていたらAIの説明文とみなす）
+ALLOWED_ASCII_WORDS = {
+    "BTC", "ETH", "XRP", "SOL", "MACD", "FOMC", "CPI", "PCE", "PPI", "FRB", "FED", "ECB", "BOJ",
+    "ETF", "FX", "USD", "JPY", "EUR", "GBP", "XAU", "GDP", "NY", "SEC", "ATH", "NFP", "ISM",
+}
 
 
 def find_problems(post: str) -> list[str]:
     if not post.strip():
         return ["本文が空"]
     problems = []
+    lines = post.split("\n")
     for pattern, label in FORBIDDEN_PATTERNS:
-        for line in post.split("\n"):
+        for line in lines:
             if re.search(pattern, line):
                 problems.append(f"{label}: {line.strip()}")
+    for word in re.findall(r"[A-Za-z]+", post):
+        if word.upper() not in ALLOWED_ASCII_WORDS:
+            problems.append(f"想定外の英単語: {word}")
+    seen = set()
+    for line in (l.strip() for l in lines):
+        if len(line) >= 4 and line in seen:
+            problems.append(f"同じ行の重複（2案混入の疑い）: {line}")
+        seen.add(line)
+    if len(post) > MAX_POST_CHARS:
+        problems.append(f"長すぎる（{len(post)}文字）")
     return problems
+
+
+REVIEW_PROMPT = """\
+次の文章は、この後そのまま1文字も変えずにXへ投稿されます。
+
+<post>
+{post}
+</post>
+
+トレーダー本人が書いたXの投稿本文として、そのまま出して問題ないかだけを判定してください。
+次のどれかが1つでもあればNGです:
+- 投稿本文以外のもの（ラベル、見出し、区切り線、説明、メモ、注釈、出典、URL、AIからの一言）
+- 修正前と修正後など、2つ以上の案が混ざっている
+- 同じ内容の繰り返し
+- 途中で切れている、または文として壊れている
+
+1行目に OK または NG とだけ書き、NGの場合は2行目に理由を書いてください。
+"""
+
+
+def passes_review(post: str) -> tuple[bool, str]:
+    result = call_claude(REVIEW_PROMPT.format(post=post))
+    first = result.strip().split("\n")[0].strip()
+    return first == "OK", result
 
 
 def extract_post(raw: str) -> str | None:
@@ -261,14 +305,17 @@ def extract_post(raw: str) -> str | None:
 
 
 def draft_with_claude(prompt: str) -> str:
-    """<post>タグ内の本文だけを取り出す。混入があれば再生成、2回ダメなら投稿中止"""
-    for attempt in range(1, 3):
+    """<post>タグ内の本文だけを取り出し、機械チェック＋別AIの目視チェックを通す。3回ダメなら投稿中止"""
+    for attempt in range(1, 4):
         raw = call_claude(prompt + OUTPUT_RULE)
         post = extract_post(raw)
         problems = find_problems(post) if post is not None else ["<post>タグが1つではない"]
         if not problems:
-            return post
-        print(f"\n[FORMAT NG {attempt}/2] {problems}\n--- raw ---\n{raw}\n{'-'*40}")
+            ok, review = passes_review(post)
+            if ok:
+                return post
+            problems = [f"レビューNG: {review}"]
+        print(f"\n[FORMAT NG {attempt}/3] {problems}\n--- raw ---\n{raw}\n{'-'*40}")
     print("❌ 本文以外の混入を解消できなかったため投稿を中止します", file=sys.stderr)
     sys.exit(1)
 
