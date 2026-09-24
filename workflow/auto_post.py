@@ -132,7 +132,14 @@ CPIで方向は出ず『行って来い』の値動き
 
 今日: {date}（{slot_label}）
 
-投稿文のみ出力してください。前置き・説明文・コメントは一切不要です。
+## 出力ルール（厳守）
+
+- 投稿本文のみを出力すること
+- URL・リンク（http://、https://）は絶対に含めない
+- 「検証メモ」「出典」「ソース」「参照」「注：」「※」などの注釈・補足は絶対に含めない
+- 「投稿には含めない」「以下省略」などのメタ指示を本文に混ぜない
+- コードブロック（```）・マークダウン記法・見出し（#）は使わない
+- 前置き・説明・コメントは一切不要。投稿本文だけを出力すること
 """
 
 VERIFY_PROMPT = """\
@@ -222,6 +229,23 @@ def call_claude(prompt: str, timeout: int = 300) -> str:
     return m.group(1).strip() if m else text
 
 
+def sanitize_draft(text: str) -> str:
+    """URLや内部メモが混入していたら除去する"""
+    lines = text.split("\n")
+    clean = []
+    for line in lines:
+        # URLを含む行を除去
+        if re.search(r'https?://', line):
+            print(f"[SANITIZE] URL行を除去: {line.strip()}", file=sys.stderr)
+            continue
+        # 注釈・メタコメント行を除去
+        if re.search(r'(検証メモ|投稿には含めない|出典|ソース：|参照：|注：|※|Source:|Ref:)', line):
+            print(f"[SANITIZE] メモ行を除去: {line.strip()}", file=sys.stderr)
+            continue
+        clean.append(line)
+    return "\n".join(clean).strip()
+
+
 def build_generate_prompt(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
     base = GENERATE_PROMPT.format(date=date_str, slot=slot, slot_label=slot_label)
@@ -250,7 +274,7 @@ def generate_and_verify(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
 
     print(f"\n[STEP 1] 投稿生成中 ({slot_label})...")
-    draft = call_claude(build_generate_prompt(date_str, slot))
+    draft = sanitize_draft(call_claude(build_generate_prompt(date_str, slot)))
     print(f"\n--- 初回生成 ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
 
     for attempt in range(1, MAX_VERIFY_ATTEMPTS + 1):
@@ -266,7 +290,7 @@ def generate_and_verify(date_str: str, slot: str) -> str:
 
         if attempt < MAX_VERIFY_ATTEMPTS:
             print(f"\n[STEP 3] 修正中...")
-            draft = call_claude(FIX_PROMPT.format(draft=draft, verify_log=verify_log))
+            draft = sanitize_draft(call_claude(FIX_PROMPT.format(draft=draft, verify_log=verify_log)))
             print(f"\n--- 修正後 ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
 
     # 3回試して通らなかった
