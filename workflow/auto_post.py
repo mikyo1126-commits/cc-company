@@ -131,15 +131,23 @@ CPIで方向は出ず『行って来い』の値動き
 ---
 
 今日: {date}（{slot_label}）
+"""
 
-## 出力ルール（厳守）
+OUTPUT_RULE = """
 
-- 投稿本文のみを出力すること
-- URL・リンク（http://、https://）は絶対に含めない
-- 「検証メモ」「出典」「ソース」「参照」「注：」「※」などの注釈・補足は絶対に含めない
-- 「投稿には含めない」「以下省略」などのメタ指示を本文に混ぜない
-- コードブロック（```）・マークダウン記法・見出し（#）は使わない
-- 前置き・説明・コメントは一切不要。投稿本文だけを出力すること
+---
+
+## 出力形式（厳守）
+
+投稿本文だけを <post> と </post> の間に書くこと。<post> は1回だけ使う。
+
+<post> の中に入れてはいけないもの:
+- 「修正後の投稿文:」「投稿文:」などのラベル・見出し
+- 区切り線（---）
+- URL・リンク
+- 検証メモ・出典・注釈・※・説明
+
+<post> の中身はそのままXに投稿される。はじめさん本人が書いた本文以外は一文字も入れないこと。
 """
 
 VERIFY_PROMPT = """\
@@ -203,8 +211,6 @@ FIX_PROMPT = """\
 
 - ✅（確認済み）の部分は変えない
 - 文体・人間らしさ・長さを維持する
-
-修正後の投稿文のみ出力してください。説明・コメントは不要です。
 """
 
 
@@ -224,26 +230,47 @@ def call_claude(prompt: str, timeout: int = 300) -> str:
     if result.returncode != 0:
         print(f"ERROR: claude CLI failed\n{result.stderr}", file=sys.stderr)
         sys.exit(result.returncode)
-    text = result.stdout.strip()
-    m = re.search(r"```[^\n]*\n(.*?)```", text, re.DOTALL)
-    return m.group(1).strip() if m else text
+    return result.stdout.strip()
 
 
-def sanitize_draft(text: str) -> str:
-    """URLや内部メモが混入していたら除去する"""
-    lines = text.split("\n")
-    clean = []
-    for line in lines:
-        # URLを含む行を除去
-        if re.search(r'https?://', line):
-            print(f"[SANITIZE] URL行を除去: {line.strip()}", file=sys.stderr)
-            continue
-        # 注釈・メタコメント行を除去
-        if re.search(r'(検証メモ|投稿には含めない|出典|ソース：|参照：|注：|※|Source:|Ref:)', line):
-            print(f"[SANITIZE] メモ行を除去: {line.strip()}", file=sys.stderr)
-            continue
-        clean.append(line)
-    return "\n".join(clean).strip()
+FORBIDDEN_PATTERNS = [
+    (r"https?://|www\.", "URL"),
+    (r"^\s*[-=_*]{3,}\s*$", "区切り線"),
+    (r"^\s*#", "見出し"),
+    (r"```|\*\*|<|>", "マークダウン/タグ"),
+    (r"投稿文|修正後|修正前|検証|メモ|出典|ソース|参照|注[:：]|※|Source|以下", "メタ文言"),
+]
+
+
+def find_problems(post: str) -> list[str]:
+    if not post.strip():
+        return ["本文が空"]
+    problems = []
+    for pattern, label in FORBIDDEN_PATTERNS:
+        for line in post.split("\n"):
+            if re.search(pattern, line):
+                problems.append(f"{label}: {line.strip()}")
+    return problems
+
+
+def extract_post(raw: str) -> str | None:
+    matches = re.findall(r"<post>(.*?)</post>", raw, re.DOTALL)
+    if len(matches) != 1:
+        return None
+    return matches[0].strip()
+
+
+def draft_with_claude(prompt: str) -> str:
+    """<post>タグ内の本文だけを取り出す。混入があれば再生成、2回ダメなら投稿中止"""
+    for attempt in range(1, 3):
+        raw = call_claude(prompt + OUTPUT_RULE)
+        post = extract_post(raw)
+        problems = find_problems(post) if post is not None else ["<post>タグが1つではない"]
+        if not problems:
+            return post
+        print(f"\n[FORMAT NG {attempt}/2] {problems}\n--- raw ---\n{raw}\n{'-'*40}")
+    print("❌ 本文以外の混入を解消できなかったため投稿を中止します", file=sys.stderr)
+    sys.exit(1)
 
 
 def build_generate_prompt(date_str: str, slot: str) -> str:
@@ -274,7 +301,7 @@ def generate_and_verify(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
 
     print(f"\n[STEP 1] 投稿生成中 ({slot_label})...")
-    draft = sanitize_draft(call_claude(build_generate_prompt(date_str, slot)))
+    draft = draft_with_claude(build_generate_prompt(date_str, slot))
     print(f"\n--- 初回生成 ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
 
     for attempt in range(1, MAX_VERIFY_ATTEMPTS + 1):
@@ -290,7 +317,7 @@ def generate_and_verify(date_str: str, slot: str) -> str:
 
         if attempt < MAX_VERIFY_ATTEMPTS:
             print(f"\n[STEP 3] 修正中...")
-            draft = sanitize_draft(call_claude(FIX_PROMPT.format(draft=draft, verify_log=verify_log)))
+            draft = draft_with_claude(FIX_PROMPT.format(draft=draft, verify_log=verify_log))
             print(f"\n--- 修正後 ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
 
     # 3回試して通らなかった
@@ -330,6 +357,12 @@ def main():
 
     # 生成→検証→修正ループ（問題があれば自動でブロック）
     verified_text = generate_and_verify(date_str, slot)
+
+    problems = find_problems(verified_text)
+    if problems:
+        print(f"❌ 投稿直前チェックNGのため中止: {problems}", file=sys.stderr)
+        sys.exit(1)
+    print(f"\n--- 投稿する本文 ---\n{verified_text}\n{'-'*40}")
 
     if not os.environ.get("TWITTER_API_KEY"):
         print("\nTWITTER_API_KEY未設定のため投稿をスキップ（ドライラン）")
