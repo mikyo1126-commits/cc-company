@@ -1,17 +1,30 @@
 name: "X自動投稿"
 
+# 投稿時刻: 朝 11:00 JST / 夜 20:00 JST（過去97投稿の時間帯別反応で最も良かった時刻）
+#
+# GitHubの予約実行は2〜5時間遅れ、遅れ方も一定しない。そこで各スロットで目標時刻の
+# 約6時間前から6回起動を仕掛け、「目標の30分前〜2時間後」に着いた最初の1回だけが
+# 生成・検証を済ませてから目標時刻ちょうどまで待って投稿する。早すぎ・遅すぎ・投稿済みの回は数秒で終了する。
 on:
   schedule:
-    # 朝: 22:00 UTC = 7:00 JST
-    - cron: '0 22 * * *'
-    # 昼: 04:00 UTC = 13:00 JST
-    - cron: '0 4 * * *'
-    # 晩: 10:00 UTC = 19:00 JST
-    - cron: '0 10 * * *'
+    # 朝 11:00 JST (= 02:00 UTC) 向け
+    - cron: '7 20 * * *'
+    - cron: '17 21 * * *'
+    - cron: '27 22 * * *'
+    - cron: '37 23 * * *'
+    - cron: '47 0 * * *'
+    - cron: '17 1 * * *'
+    # 夜 20:00 JST (= 11:00 UTC) 向け
+    - cron: '7 5 * * *'
+    - cron: '17 6 * * *'
+    - cron: '27 7 * * *'
+    - cron: '37 8 * * *'
+    - cron: '47 9 * * *'
+    - cron: '17 10 * * *'
   workflow_dispatch:
     inputs:
       slot:
-        description: '投稿スロット (morning/noon/evening)'
+        description: '投稿スロット（手動実行はすぐに投稿する）'
         required: true
         default: 'morning'
         type: choice
@@ -23,36 +36,97 @@ on:
 env:
   TZ: Asia/Tokyo
 
+concurrency:
+  group: x-auto
+  cancel-in-progress: false
+
 jobs:
   auto-post:
     name: auto-post
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     permissions:
       contents: read
 
     steps:
+      - name: decide
+        id: decide
+        run: |
+          DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
+          echo "DATE=$DATE" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "SLOT=${{ github.event.inputs.slot }}" >> $GITHUB_ENV
+            echo "go=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          case "${{ github.event.schedule }}" in
+            "7 20 * * *"|"17 21 * * *"|"27 22 * * *"|"37 23 * * *"|"47 0 * * *"|"17 1 * * *") SLOT=morning; TARGET_HM="11:00" ;;
+            "7 5 * * *"|"17 6 * * *"|"27 7 * * *"|"37 8 * * *"|"47 9 * * *"|"17 10 * * *")  SLOT=evening; TARGET_HM="20:00" ;;
+            *) echo "::error::unknown schedule"; exit 1 ;;
+          esac
+          TARGET=$(TZ=Asia/Tokyo date -d "$DATE $TARGET_HM" +%s)
+          NOW=$(date +%s)
+          echo "SLOT=$SLOT" >> $GITHUB_ENV
+          echo "slot=$SLOT" >> $GITHUB_OUTPUT
+          if [ "$NOW" -lt $((TARGET - 1800)) ]; then
+            echo "::notice::$SLOT: 目標 $TARGET_HM の30分より前に起動したので、この回は見送り（後続の起動で投稿）"
+            echo "go=false" >> $GITHUB_OUTPUT
+          elif [ "$NOW" -gt $((TARGET + 7200)) ]; then
+            echo "::warning::$SLOT: 目標 $TARGET_HM から2時間以上遅れて起動したので投稿しない"
+            echo "go=false" >> $GITHUB_OUTPUT
+          else
+            echo "POST_AT=$TARGET" >> $GITHUB_ENV
+            echo "go=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: check-already-posted
+        id: marker
+        if: github.event_name == 'schedule' && steps.decide.outputs.go == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .posted-marker
+          key: posted-${{ env.DATE }}-${{ steps.decide.outputs.slot }}
+          lookup-only: true
+
+      - name: gate
+        id: gate
+        run: |
+          if [ "${{ steps.decide.outputs.go }}" != "true" ]; then
+            echo "run=false" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.marker.outputs.cache-hit }}" = "true" ]; then
+            echo "::notice::$SLOT は今日すでに投稿済みなので終了"
+            echo "run=false" >> $GITHUB_OUTPUT
+          else
+            echo "run=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: checkout
+        if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@v4
 
       - name: setup-python
+        if: steps.gate.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: install-deps
+        if: steps.gate.outputs.run == 'true'
         run: pip install -r requirements.txt
 
       - name: setup-node
+        if: steps.gate.outputs.run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: install-claude-cli
+        if: steps.gate.outputs.run == 'true'
         run: npm install -g @anthropic-ai/claude-code@latest
 
       - name: validate-token
+        if: steps.gate.outputs.run == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
@@ -62,21 +136,8 @@ jobs:
           fi
           echo "::notice::OAuth token validated"
 
-      - name: determine-slot
-        run: |
-          echo "DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)" >> $GITHUB_ENV
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "SLOT=${{ github.event.inputs.slot }}" >> $GITHUB_ENV
-          else
-            case "${{ github.event.schedule }}" in
-              "0 22 * * *") echo "SLOT=morning" >> $GITHUB_ENV ;;
-              "0 4 * * *")  echo "SLOT=noon"    >> $GITHUB_ENV ;;
-              "0 10 * * *") echo "SLOT=evening" >> $GITHUB_ENV ;;
-              *)             echo "SLOT=morning" >> $GITHUB_ENV ;;
-            esac
-          fi
-
       - name: generate-and-post
+        if: steps.gate.outputs.run == 'true'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
@@ -84,5 +145,13 @@ jobs:
           TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
           TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
         run: |
-          echo "::notice::Slot: $SLOT / Date: $DATE"
+          echo "::notice::Slot: $SLOT / Date: $DATE / Post at: ${POST_AT:-now}"
           python3 workflow/auto_post.py "$SLOT"
+          echo "posted" > .posted-marker
+
+      - name: mark-posted
+        if: steps.gate.outputs.run == 'true' && github.event_name == 'schedule'
+        uses: actions/cache/save@v4
+        with:
+          path: .posted-marker
+          key: posted-${{ env.DATE }}-${{ env.SLOT }}

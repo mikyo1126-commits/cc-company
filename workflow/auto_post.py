@@ -18,6 +18,7 @@ import os
 import re
 import sys
 import subprocess
+import time
 import tweepy
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -109,9 +110,9 @@ GENERATE_PROMPT = """\
 
 ### ❺ スロット別の自然なトーン
 
-- 朝: 「今日どこに注目するか」を自分に言い聞かせるような雰囲気
+- 朝（11時ごろ投稿）: 「東京時間の午前の動きと、今日どこに注目するか」を語る雰囲気
 - 昼: 「午前の動きを見て感じたこと」を会話するような雰囲気
-- 晩: 「今日1日を振り返って気づいたこと」を語るような雰囲気
+- 晩（20時ごろ投稿）: 「今日の振り返りと、今夜の欧州・NY時間に向けてどこを見るか」を語る雰囲気
 
 ---
 
@@ -439,6 +440,14 @@ def main():
     if not os.environ.get("TWITTER_API_KEY"):
         print("\nTWITTER_API_KEY未設定のため投稿をスキップ（ドライラン）")
         return
+
+    post_at = os.environ.get("POST_AT")
+    if post_at:
+        wait = int(post_at) - time.time()
+        target = datetime.fromtimestamp(int(post_at), JST).strftime("%H:%M")
+        if wait > 0:
+            print(f"\n{target} JST まで {int(wait)} 秒待ってから投稿します")
+            time.sleep(wait)
 
     print("\n[STEP 4] X に投稿中...")
     tweet_id = post_to_x(verified_text)
