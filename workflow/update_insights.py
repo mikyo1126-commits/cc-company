@@ -20,6 +20,8 @@ BTC_KEYWORDS    = ["ビットコイン", "BTC", "bitcoin", "btc"]
 GOLD_KEYWORDS   = ["ゴールド", "金", "gold", "XAU"]
 FX_KEYWORDS     = ["ドル円", "ユーロ", "ポンド", "為替", "FX", "fx", "ドル"]
 MACRO_KEYWORDS  = ["FOMC", "fomc", "日銀", "FRB", "CPI", "雇用統計", "GDP", "利上げ", "利下げ"]
+INDEX_KEYWORDS  = ["ナスダック", "NASDAQ", "nasdaq", "S&P", "ダウ", "日経"]
+AUTO_POST_TOPICS = {"FX", "株価指数", "ゴールド"}
 MIND_KEYWORDS   = ["心理", "メンタル", "感情", "バイアス", "失敗", "経験", "学び", "思う", "感じ", "怖", "欲"]
 CHART_TERMS     = ["三尊", "ネックライン", "押し目", "戻り目", "移動平均", "週足", "日足", "月足",
                    "ピンバー", "ブレイク", "サポート", "レジスタンス", "トレンド転換", "MACD"]
@@ -48,6 +50,7 @@ def classify_topic(text):
     t = text.lower()
     if any(k.lower() in t for k in BTC_KEYWORDS):   return "BTC"
     if any(k.lower() in t for k in GOLD_KEYWORDS):  return "ゴールド"
+    if any(k.lower() in t for k in INDEX_KEYWORDS): return "株価指数"
     if any(k.lower() in t for k in MACRO_KEYWORDS): return "マクロ"
     if any(k.lower() in t for k in FX_KEYWORDS):    return "FX"
     if any(k in t for k in MIND_KEYWORDS):           return "マインド"
@@ -138,8 +141,8 @@ def generate_md(data, total):
     diff_quest = pct(high, "has_question") - pct(low, "has_question")
     diff_num   = pct(high, "has_specific_number") - pct(low, "has_specific_number")
 
-    top_topic = topic_ranking[0][0] if topic_ranking else "BTC"
-    top_topic_score = sum(topic_ranking[0][1]) / len(topic_ranking[0][1]) if topic_ranking else 0
+    # BTCははじめさん本人が投稿するため、自動投稿で扱うテーマの中から推す
+    auto_ranking = [(t, s) for t, s in topic_ranking if t in AUTO_POST_TOPICS]
 
     md = f"""# @hajime_cp 投稿インサイト（自動更新）
 
@@ -156,8 +159,11 @@ def generate_md(data, total):
         bar = "▓" * max(1, int(s / 5))
         md += f"- **{topic}** {bar} {s:.1f}pt（{n}件）\n"
 
-    md += f"""
-→ **{top_topic}が最強（平均{top_topic_score:.1f}pt）。毎回まず{top_topic}を調べること**
+    md += "\n※ BTCははじめさん本人が投稿するため、自動投稿ではドル円・ナスダック・ゴールドだけを扱う\n"
+    if auto_ranking:
+        best, scores = auto_ranking[0]
+        md += f"→ **自動投稿で扱うテーマの中では{best}の反応が最も良い（平均{sum(scores)/len(scores):.1f}pt）。同じくらい動きがある日は{best}を優先**\n"
+    md += """
 
 ---
 
@@ -204,7 +210,6 @@ def generate_md(data, total):
 - 箇条書き・見出し（◽️■）主体の構成
 - 改行なし連続文章
 - 断定的・説教的なトーン
-- BTCに触れない投稿
 
 ---
 

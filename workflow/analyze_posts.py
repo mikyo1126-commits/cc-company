@@ -29,6 +29,7 @@ BTC_KEYWORDS   = ["ビットコイン", "BTC", "bitcoin", "btc"]
 GOLD_KEYWORDS  = ["ゴールド", "金", "gold", "XAU"]
 FX_KEYWORDS    = ["ドル円", "ユーロ", "ポンド", "為替", "FX", "fx", "ドル"]
 MACRO_KEYWORDS = ["FOMC", "fomc", "日銀", "FRB", "CPI", "雇用統計", "GDP", "利上げ", "利下げ"]
+INDEX_KEYWORDS = ["ナスダック", "NASDAQ", "nasdaq", "S&P", "ダウ", "日経"]
 MIND_KEYWORDS  = ["心理", "メンタル", "感情", "バイアス", "失敗", "経験", "学び", "思う", "感じ", "怖", "欲"]
 
 CHART_TERMS    = ["三尊", "ネックライン", "押し目", "戻り目", "移動平均", "週足", "日足", "月足",
@@ -63,6 +64,7 @@ def classify_topic(text):
     t = text.lower()
     if any(k.lower() in t for k in BTC_KEYWORDS):   return "BTC"
     if any(k.lower() in t for k in GOLD_KEYWORDS):  return "ゴールド"
+    if any(k.lower() in t for k in INDEX_KEYWORDS): return "株価指数"
     if any(k.lower() in t for k in MACRO_KEYWORDS): return "マクロ"
     if any(k.lower() in t for k in FX_KEYWORDS):    return "FX"
     if any(k in t for k in MIND_KEYWORDS):           return "マインド"
