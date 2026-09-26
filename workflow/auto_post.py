@@ -338,9 +338,13 @@ FIX_PROMPT = """\
 # Claude CLI 呼び出し
 # ──────────────────────────────────────────
 
-def call_claude(prompt: str, timeout: int = 300) -> str:
+def call_claude(prompt: str, timeout: int = 300, model: str | None = None) -> str:
+    """model 指定で失敗した場合は RuntimeError（呼び出し側で既定モデルに切り替える）"""
+    cmd = ["claude", "--print", "--dangerously-skip-permissions"]
+    if model:
+        cmd += ["--model", model]
     result = subprocess.run(
-        ["claude", "--print", "--dangerously-skip-permissions", "-"],
+        cmd + ["-"],
         input=prompt,
         capture_output=True,
         text=True,
@@ -348,7 +352,9 @@ def call_claude(prompt: str, timeout: int = 300) -> str:
         timeout=timeout,
     )
     if result.returncode != 0:
-        print(f"ERROR: claude CLI failed\n{result.stderr}", file=sys.stderr)
+        print(f"ERROR: claude CLI failed (model={model or 'default'})\n{result.stderr}", file=sys.stderr)
+        if model:
+            raise RuntimeError(result.stderr)
         sys.exit(result.returncode)
     return result.stdout.strip()
 
@@ -469,6 +475,81 @@ def is_verified(verify_log: str) -> bool:
 
 
 # ──────────────────────────────────────────
+# Fable 5.1 との壁打ち
+# ──────────────────────────────────────────
+
+CRITIC_MODEL = os.environ.get("CRITIC_MODEL", "claude-fable-5-1")
+MAX_SPAR_ROUNDS = 2
+
+CRITIQUE_PROMPT = """\
+あなたは、FX・ゴールド・株価指数を扱うトレーダー「はじめ」さんのX投稿を、投稿前に一緒に磨く相談相手です。
+はじめさんはFXのアフィリエイト収入で生計を立てていて、誤った情報や信用を落とす投稿は致命的です。
+下書きを書いた担当者は、次の指示を受けて書いています。
+
+<指示>
+{rules}
+</指示>
+
+<下書き>
+{draft}
+</下書き>
+
+X上のトレーダーやFX初心者の読者の目線で、この下書きをより良くするための率直な指摘をしてください。見る観点:
+- 事実の正確さと、誤解を招く書き方がないか。事実が怪しいと思ったらWebSearchで確認する
+- 指示（テーマ・文体・人物像・締め方・禁止事項）に沿っているか
+- 読んだ人が反応・保存・拡散したくなる中身と切り口になっているか
+- 人が書いた自然な投稿に見えるか
+
+直すべき点がなければ、1行目に OK とだけ書いて終える。
+直すべき点があれば、1行目に「指摘あり」と書き、その下に指摘を重要な順に書く（なぜそう直すべきかも添える）。
+改善案の文面を示す場合、新しい事実を足すなら、2つ以上のソースで確認できたものだけにし、確認したソースを添える。
+"""
+
+REVISE_PROMPT = """\
+{rules}
+
+---
+
+## 相談相手からの指摘を踏まえて書き直す
+
+あなたが書いた下書き:
+<下書き>
+{draft}
+</下書き>
+
+相談相手（別のAI）からの指摘:
+<指摘>
+{critique}
+</指摘>
+
+指摘を1つずつ検討し、納得できるものは取り入れ、納得できないもの（上の指示に反する、事実が確認できない等）は取り入れずに書き直す。
+指摘の中の新しい事実を使う場合は、自分でもWebSearchで2つ以上のソースから確認できたものだけを使う。
+"""
+
+
+def critique(rules: str, draft: str) -> str:
+    prompt = CRITIQUE_PROMPT.format(rules=rules, draft=draft)
+    try:
+        return call_claude(prompt, timeout=600, model=CRITIC_MODEL)
+    except (RuntimeError, subprocess.TimeoutExpired):
+        print(f"::warning::{CRITIC_MODEL} を使えなかったため、既定のモデルで壁打ちしました")
+        return call_claude(prompt, timeout=600)
+
+
+def spar(rules: str, draft: str) -> str:
+    for round_no in range(1, MAX_SPAR_ROUNDS + 1):
+        print(f"\n[壁打ち {round_no}/{MAX_SPAR_ROUNDS}] {CRITIC_MODEL} に相談中...")
+        feedback = critique(rules, draft)
+        print(f"\n--- 指摘 ---\n{feedback}\n{'-'*40}")
+        if feedback.strip().split("\n")[0].strip() == "OK":
+            print("\n壁打ち完了（指摘なし）")
+            return draft
+        draft = draft_with_claude(REVISE_PROMPT.format(rules=rules, draft=draft, critique=feedback))
+        print(f"\n--- 書き直し ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
+    return draft
+
+
+# ──────────────────────────────────────────
 # メインフロー
 # ──────────────────────────────────────────
 
@@ -476,8 +557,11 @@ def generate_and_verify(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
 
     print(f"\n[STEP 1] 投稿生成中 ({slot_label})...")
-    draft = draft_with_claude(build_generate_prompt(date_str, slot))
+    rules = build_generate_prompt(date_str, slot)
+    draft = draft_with_claude(rules)
     print(f"\n--- 初回生成 ({len(draft)}文字) ---\n{draft}\n{'-'*40}")
+
+    draft = spar(rules, draft)
 
     for attempt in range(1, MAX_VERIFY_ATTEMPTS + 1):
         print(f"\n[STEP 2] 検証中（{attempt}/{MAX_VERIFY_ATTEMPTS}回目）...")
