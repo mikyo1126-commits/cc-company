@@ -89,11 +89,11 @@ jobs:
 
       - name: check-already-posted
         id: marker
-        if: github.event_name == 'schedule' && steps.decide.outputs.go == 'true'
+        if: steps.decide.outputs.go == 'true' && env.SLOT != 'noon'
         uses: actions/cache/restore@v4
         with:
           path: .posted-marker
-          key: posted-${{ env.DATE }}-${{ steps.decide.outputs.slot }}
+          key: posted-${{ env.DATE }}-${{ env.SLOT }}
           lookup-only: true
 
       - name: gate
