@@ -43,10 +43,7 @@ GENERATE_PROMPT = """\
 
 ## STEP 1: 今の相場をWebSearchで確認する
 
-テーマは次の3つから、今いちばん動きがある・注目材料があるものを1つ選ぶ:
-- ドル円
-- ナスダック
-- ゴールド
+{theme_rule}
 
 ビットコイン・仮想通貨は扱わない（はじめさん本人がビットコインの投稿をしていて、内容がぶつかるため）。
 過去分析インサイトにビットコインの話が出てきても、それは参考データとしてだけ読み、テーマには選ばない。
@@ -154,6 +151,60 @@ FOMCの初動の下落でも崩れなかった
 
 今日: {date}（{slot_label}）
 """
+
+WEEKDAY_THEME = """テーマは次の3つから、今いちばん動きがある・注目材料があるものを1つ選ぶ:
+- ドル円
+- ナスダック
+- ゴールド"""
+
+WEEKEND_COMMON = """
+今日は{day_label}（日本時間）で市場は休場。「午前の動き」「今夜のNY時間」など平日の言い方はしない。
+対象はドル円・ナスダック・ゴールド（1つでも、まとめてでもよい）。土日の投稿は120〜200文字まで長くしてよい。
+締めは❹のとおり、来週どうなったら入るかという前向きな形にする。"""
+
+FUNDAMENTAL_THEME = """この投稿はファンダメンタルズの話にする。
+金融政策（FRB・日銀の金利見通し）、インフレ・雇用などの経済指標、米国債利回り、ドルの強弱など、値動きの背景にある材料を1つに絞り、
+「なぜそれが相場に効くのか」「来週以降どこを見ておくか」をはじめさんの見方として書く。チャートの細かい話より、背景と見通しが中心。
+
+ファンダメンタル投稿の口調の参考（実際の投稿ではない。文面は使わない）:
+ドル円
+
+結局ずっと金利差の話に戻ってくる
+
+アメリカの利下げ観測が後退してる限り、円を買う理由はなかなか出てこない
+
+次の指標で流れが変わるかどうか、そこだけは見ておきたい""" + WEEKEND_COMMON
+
+FALLBACK_NOTE = """
+
+ただし、語れる材料が薄くて投稿として良い内容にならない場合は、この形はやめてファンダメンタルズの投稿にする。
+その場合は、金融政策以外の切り口（資金の流れ・需給・地政学・季節性など）を選ぶ（今日のもう1本のファンダメンタル投稿と話が重ならないようにするため）。
+どちらにしたかの説明は書かず、投稿本文だけを出す。"""
+
+RECAP_THEME = """この投稿は「今週のまとめ」にする。
+今週のドル円・ナスダック・ゴールドの値動きをWebSearchで確認し、一番語れる流れ（FOMCやCPIなどの指標を受けてどう動いたか、週足でどう締めたか等）を1つに絞って、はじめさんの振り返りとして書く。""" + FALLBACK_NOTE + WEEKEND_COMMON
+
+PREVIEW_THEME = """この投稿は「来週の注目イベント」の話にする。
+来週の経済指標・イベント（FOMC、雇用統計、CPI、日銀会合、要人発言など）をWebSearchで確認し、ドル円・ナスダック・ゴールドに一番効きそうなものを1つに絞って、
+なぜ大事か・発表前後にどう構えるか（「発表直後は飛び乗らず、方向が出てから入る」など）をはじめさんの見方として書く。
+イベントの日時を書く場合は日本時間で書き、2つ以上のソースで確認する。""" + FALLBACK_NOTE + WEEKEND_COMMON
+
+# (曜日, スロット) → テーマ。土曜朝は今週のまとめ、日曜夜は来週の注目イベント、残りはファンダメンタル
+WEEKEND_THEMES = {
+    (5, "morning"): RECAP_THEME,
+    (5, "evening"): FUNDAMENTAL_THEME,
+    (6, "morning"): FUNDAMENTAL_THEME,
+    (6, "evening"): PREVIEW_THEME,
+}
+
+
+def theme_rule_for(date_str: str, slot: str) -> str:
+    weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
+    if weekday < 5:
+        return WEEKDAY_THEME
+    theme = WEEKEND_THEMES.get((weekday, slot), FUNDAMENTAL_THEME)
+    return theme.format(day_label="土曜" if weekday == 5 else "日曜")
+
 
 OUTPUT_RULE = """
 
@@ -265,7 +316,7 @@ FORBIDDEN_PATTERNS = [
     (r"```|\*\*|<|>|\[|\]", "マークダウン/タグ"),
     (r"^[^\n]{0,20}[:：]\s*$", "ラベル行"),
     (r"投稿文|修正|訂正|改訂|検証|確認済|未確認|要確認|メモ|出典|ソース|参照|注[:：]|※|補足|以下|下書き|ドラフト|案[0-9０-９]|バージョン|文字数", "メタ文言"),
-    (r"怖|不安|自信がな|迷って|読み切れ|様子見|見送|控え|休む|休もう|やめとく|やめておく", "弱気・トレードを控える表現"),
+    (r"怖|不安(だ|で|に)|自信がな|迷って|読み切れ|様子見(し|する|かな|で)|(トレード|エントリー|取引|売買)(は|を|も)?(控え|見送|休)|今日は(休|やめ)|休もう|やめとく|やめておく", "弱気・トレードを控える表現"),
     (r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|アルトコイン|ビトコ", "ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）"),
 ]
 
@@ -274,6 +325,7 @@ ALLOWED_ASCII_WORDS = {
     "MACD", "FOMC", "CPI", "PCE", "PPI", "FRB", "FED", "ECB", "BOJ",
     "ETF", "FX", "USD", "JPY", "EUR", "GBP", "XAU", "GDP", "NY", "ATH", "NFP", "ISM",
     "NASDAQ", "VIX", "S", "P",
+    "QT", "QE", "YCC", "BOE", "OPEC", "WTI", "IMF",
 }
 
 
@@ -348,7 +400,10 @@ def draft_with_claude(prompt: str) -> str:
 
 def build_generate_prompt(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
-    base = GENERATE_PROMPT.format(date=date_str, slot=slot, slot_label=slot_label)
+    base = GENERATE_PROMPT.format(
+        date=date_str, slot=slot, slot_label=slot_label,
+        theme_rule=theme_rule_for(date_str, slot),
+    )
     if INSIGHTS_PATH.exists():
         insights = INSIGHTS_PATH.read_text(encoding="utf-8")
         base += f"\n\n---\n\n## 過去分析インサイト（毎週更新）\n\n{insights}"
