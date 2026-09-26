@@ -32,6 +32,10 @@ on:
           - morning
           - noon
           - evening
+      post_at:
+        description: '投稿時刻 HH:MM（日本時間）。空欄ならすぐ投稿'
+        required: false
+        default: ''
 
 env:
   TZ: Asia/Tokyo
@@ -56,6 +60,10 @@ jobs:
           echo "DATE=$DATE" >> $GITHUB_ENV
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "SLOT=${{ github.event.inputs.slot }}" >> $GITHUB_ENV
+            POST_AT_HM="${{ github.event.inputs.post_at }}"
+            if [ -n "$POST_AT_HM" ]; then
+              echo "POST_AT=$(TZ=Asia/Tokyo date -d "$DATE $POST_AT_HM" +%s)" >> $GITHUB_ENV
+            fi
             echo "go=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -150,7 +158,7 @@ jobs:
           echo "posted" > .posted-marker
 
       - name: mark-posted
-        if: steps.gate.outputs.run == 'true' && github.event_name == 'schedule'
+        if: steps.gate.outputs.run == 'true' && env.SLOT != 'noon'
         uses: actions/cache/save@v4
         with:
           path: .posted-marker
