@@ -240,7 +240,7 @@ def generate_md(data, total):
         md += f"- **{h:02d}時**: 平均{s:.1f}pt（{n}件）\n"
 
     md += f"""
-現在のスケジュール: 朝11時 / 夜20時（Claude Code の Routine で起動）
+現在のスケジュール: 毎日 朝9時 / 夜18時
 
 ---
 
