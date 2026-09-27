@@ -84,8 +84,9 @@ GENERATE_PROMPT = """\
 
 ### ❸ 内容のルール
 
-- リアルタイムの市場価格（$76,500などの細かい数値）は書かない
-  → 「三尊のネックライン」「月足の短期線」「MACDのデッドクロス」などのテクニカル的な表現にする
+- 価格や価格の水準は数字で一切書かない。「160円」「156円台」「3,500ドル」のようなキリのいい節目も書かない
+  → 「200日線」「直近高値」「節目」「大台」「三尊のネックライン」「MACDのデッドクロス」などの言葉で表す
+  （初心者向け基礎の「仮にドル円150円で1万通貨なら」のような仮の計算例だけは例外）
 - チャートの節目・構造（三尊・ネックライン・週足・ピンバー・MACD等）への言及は高評価につながる
 - RSIは使わない。オシレーター系を使う場合はMACDに統一する
 - 「なぜそうなったか」の自分なりの解釈を入れる
@@ -361,6 +362,12 @@ def call_claude(prompt: str, timeout: int = 300, model: str | None = None) -> st
 
 MAX_POST_CHARS = 250
 
+# 相場の価格水準（160円方向、156円台、3,500ドル付近、20,000ポイント など）。損益額などの金額は対象外
+PRICE_LEVEL = (
+    r"(\d{2,3}(\.\d+)?円|\d[\d,]*(\.\d+)?(ドル|ポイント|pt))"
+    r"(台|方向|手前|付近|ちょうど|まで|前後|近辺|割れ|突破|回復|到達|超え|を(上|下|割|超|抜|試|回|付)|で(止|跳|反|押|頭|底)|から|へ|に(到|迫|接|届|乗|戻|タッチ)|が(壁|節目|目の前|視野|意識))"
+)
+
 FORBIDDEN_PATTERNS = [
     (r"https?://|www\.|\.com|\.jp", "URL"),
     (r"^\s*[-=_*―─]{3,}\s*$", "区切り線"),
@@ -391,6 +398,9 @@ def find_problems(post: str) -> list[str]:
         for line in lines:
             if re.search(pattern, line):
                 problems.append(f"{label}: {line.strip()}")
+    for line in lines:
+        if "仮に" not in line and re.search(PRICE_LEVEL, line):
+            problems.append(f"価格の数字（書かないルール）: {line.strip()}")
     for word in re.findall(r"[A-Za-z]+", post):
         if word.upper() not in ALLOWED_ASCII_WORDS:
             problems.append(f"想定外の英単語: {word}")
@@ -475,10 +485,10 @@ def is_verified(verify_log: str) -> bool:
 
 
 # ──────────────────────────────────────────
-# Fable 5.1 との壁打ち
+# Opus 5.5 との壁打ち
 # ──────────────────────────────────────────
 
-CRITIC_MODEL = os.environ.get("CRITIC_MODEL", "claude-fable-5-1")
+CRITIC_MODEL = os.environ.get("CRITIC_MODEL", "claude-opus-5-5")
 MAX_SPAR_ROUNDS = 2
 
 CRITIQUE_PROMPT = """\
@@ -503,6 +513,7 @@ X上のトレーダーやFX初心者の読者の目線で、この下書きを�
 直すべき点がなければ、1行目に OK とだけ書いて終える。
 直すべき点があれば、1行目に「指摘あり」と書き、その下に指摘を重要な順に書く（なぜそう直すべきかも添える）。
 改善案の文面を示す場合、新しい事実を足すなら、2つ以上のソースで確認できたものだけにし、確認したソースを添える。
+価格や価格の水準は数字で書かない（キリのいい節目も含む）というルールがあるので、改善案にも価格の数字は入れない。
 """
 
 REVISE_PROMPT = """\
