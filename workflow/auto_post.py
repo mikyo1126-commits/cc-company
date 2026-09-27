@@ -200,6 +200,7 @@ def episodes_rule() -> str:
 WEEKEND_COMMON = """
 今日は{day_label}（日本時間）で市場は休場。「午前の動き」「今夜のNY時間」など平日の言い方はしない。
 対象はドル円・ナスダック・ゴールド（1つでも、まとめてでもよい）。土日の投稿は120〜200文字まで長くしてよい。
+土日の投稿は1行目に「ドル円」「ゴールド」などのテーマ名を置かず、いきなり本文から書き始める（参考例の1行目のテーマ名は平日用）。
 締めは❹のとおり、来週どうなったら入るかという前向きな形にする。"""
 
 FUNDAMENTAL_THEME = """この投稿はファンダメンタルズの話にする。
@@ -207,9 +208,7 @@ FUNDAMENTAL_THEME = """この投稿はファンダメンタルズの話にする
 「なぜそれが相場に効くのか」「来週以降どこを見ておくか」をはじめさんの見方として書く。チャートの細かい話より、背景と見通しが中心。
 
 ファンダメンタル投稿の口調の参考（実際の投稿ではない。文面は使わない）:
-ドル円
-
-結局ずっと金利差の話に戻ってくる
+ドル円は結局ずっと金利差の話に戻ってくる
 
 アメリカの利下げ観測が後退してる限り、円を買う理由はなかなか出てこない
 
@@ -389,11 +388,18 @@ ALLOWED_ASCII_WORDS = {
 }
 
 
-def find_problems(post: str) -> list[str]:
+THEME_TITLES = {"ドル円", "ゴールド", "ナスダック", "金", "為替", "ドル", "米国株", "S&P500", "FX", "ユーロドル", "ポンド円"}
+
+
+def find_problems(post: str, weekend: bool | None = None) -> list[str]:
     if not post.strip():
         return ["本文が空"]
     problems = []
     lines = post.split("\n")
+    if weekend is None:
+        weekend = datetime.now(JST).weekday() >= 5
+    if weekend and lines[0].strip() in THEME_TITLES:
+        problems.append(f"土日は1行目にテーマ名を書かない: {lines[0].strip()}")
     for pattern, label in FORBIDDEN_PATTERNS:
         for line in lines:
             if re.search(pattern, line):
