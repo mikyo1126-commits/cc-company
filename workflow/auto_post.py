@@ -15,6 +15,7 @@ Usage:
 """
 
 import os
+import random
 import re
 import sys
 import subprocess
@@ -62,9 +63,9 @@ GENERATE_PROMPT = """\
 **やること:**
 - 「けど」「なんか」「謎に」「なんで」「かも」「っぽい」「どうせ」「正直」などの口語を自然に使う
 - 「〜かも」「〜かな」「と見ている」「〜じゃないか」など断定しない表現を混ぜる
-- 驚きや感情が伝わる表現を入れる（「大丈夫か？🤔」「急に強くなった」「やけに」など）
+- 驚きや感情が伝わる表現を入れる（「大丈夫か？」「急に強くなった」「やけに」など）
 - 「昨日」「今朝」「さっき」「今週」など時間的文脈を自然に入れる
-- 絵文字を1〜2個、文の流れを壊さない位置に入れる（🚀🤔を推奨）
+{emoji_rule}
 
 **絶対にやらないこと:**
 - 箇条書き（◽️・■）や見出し構造は使わない
@@ -132,7 +133,7 @@ CPIで方向は出ず『行って来い』の値動き
 例2:
 ゴールド
 
-やけに弱くなったけど大丈夫か？🤔
+やけに弱くなったけど大丈夫か？
 
 日足の短期線を割ってきたから、ここで買いに飛び乗るのはリスクが高い
 下で止まれるかどうかが分かれ目になりそう
@@ -407,6 +408,10 @@ def find_problems(post: str, weekend: bool | None = None) -> list[str]:
         for line in lines:
             if re.search(pattern, line):
                 problems.append(f"{label}: {line.strip()}")
+    if re.search(r"[⚠❌]", post):
+        problems.append("⚠️・❌ は事実確認の判定記号と紛らわしいので使わない")
+    if len(re.findall(r"[\U0001F300-\U0001FAFF☀-➿‼]", post)) > 3:
+        problems.append("絵文字が多すぎる（3個まで）")
     for line in lines:
         if "仮に" not in line and re.search(PRICE_LEVEL, line):
             problems.append(f"価格の数字（書かないルール）: {line.strip()}")
@@ -470,11 +475,41 @@ def draft_with_claude(prompt: str) -> str:
     sys.exit(1)
 
 
+EMOJI_PALETTE = {
+    "急騰・強い": "🚀 📈 🔥 💪",
+    "急落・弱い": "📉 🥶 😱 💦",
+    "驚き": "😳 👀 ‼️",
+    "注目・分かれ目": "👀 📌 🎯",
+    "首をかしげる": "🤔 🧐",
+    "失敗談・苦い思い出": "😇 💸 🫠 😅 😭",
+    "基礎・学び": "💡 📝 ✅ 🔰",
+    "前向き": "💪 👍 ✨ 🙌",
+    "週末": "☕ 🗓️",
+}
+
+
+def emoji_rule_for(date_str: str, slot: str) -> str:
+    # 日付とスロットで決まる乱数（作り直しても同じ回は同じ方針になる）
+    rng = random.Random(f"{date_str}-{slot}")
+    if rng.random() < 0.2:
+        return "- 今回の投稿は絵文字を使わない（毎回入っていると機械的に見えるため）"
+    all_emoji = " ".join(EMOJI_PALETTE.values()).split()
+    hints = " ".join(rng.sample([e for e in all_emoji if e != "🤔"], 3))
+    table = "\n".join(f"    - {k}: {v}" for k, v in EMOJI_PALETTE.items())
+    return (
+        "- 絵文字は内容に合うものを0〜2個。同じ絵文字ばかりだと機械的に見えるので、場面に合わせて使い分ける\n"
+        "  - 🤔は本当に首をかしげる場面だけにし、多用しない\n"
+        f"  - 今回は {hints} あたりが候補（内容に合わなければ使わなくてよい）\n"
+        "  - 場面ごとの使い分け:\n" + table
+    )
+
+
 def build_generate_prompt(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
     base = GENERATE_PROMPT.format(
         date=date_str, slot=slot, slot_label=slot_label,
         theme_rule=theme_rule_for(date_str, slot),
+        emoji_rule=emoji_rule_for(date_str, slot),
     )
     if INSIGHTS_PATH.exists():
         insights = INSIGHTS_PATH.read_text(encoding="utf-8")
