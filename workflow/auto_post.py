@@ -410,8 +410,8 @@ def find_problems(post: str, weekend: bool | None = None) -> list[str]:
                 problems.append(f"{label}: {line.strip()}")
     if re.search(r"[⚠❌]", post):
         problems.append("⚠️・❌ は事実確認の判定記号と紛らわしいので使わない")
-    if len(re.findall(r"[\U0001F300-\U0001FAFF☀-➿‼]", post)) > 3:
-        problems.append("絵文字が多すぎる（3個まで）")
+    if len(re.findall(r"[\U0001F300-\U0001FAFF☀-➿‼]", post)) > 2:
+        problems.append("絵文字が多すぎる（2個まで）")
     for line in lines:
         if "仮に" not in line and re.search(PRICE_LEVEL, line):
             problems.append(f"価格の数字（書かないルール）: {line.strip()}")
