@@ -14,11 +14,13 @@ Usage:
     python3 workflow/auto_post.py evening
 """
 
+import json
 import os
 import random
 import re
 import sys
 import subprocess
+import tempfile
 import time
 import tweepy
 from datetime import datetime, timezone, timedelta
@@ -28,6 +30,7 @@ JST = timezone(timedelta(hours=9))
 SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩"}
 ROOT_DIR = Path(__file__).parent.parent
 INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
+POSTED_LOG = ROOT_DIR / "workflow" / "posted_log.jsonl"
 MAX_VERIFY_ATTEMPTS = 3
 
 # ──────────────────────────────────────────
@@ -90,6 +93,8 @@ GENERATE_PROMPT = """\
   （初心者向け基礎の「仮にドル円150円で1万通貨なら」のような仮の計算例だけは例外）
 - チャートの節目・構造（三尊・ネックライン・週足・ピンバー・MACD等）への言及は高評価につながる
 - RSIは使わない。オシレーター系を使う場合はMACDに統一する
+- アフィリエイト案件（Vantage Trading、FXGT等）には触れない（触れると景品表示法・ステマ規制上の開示表記が必要になるため）
+- 「僕も最初は〜だった」「昔〜して損した」のような、はじめさん本人の過去の体験は、失敗談の投稿で登録済みエピソードを使う場合を除いて書かない（本人に無い体験を作ると事実でない投稿になるため）
 - 「なぜそうなったか」の自分なりの解釈を入れる
 - 方向感（「上を試しそう」「下に向かうかも」）はOK。断定はNG
 
@@ -346,14 +351,17 @@ def call_claude(prompt: str, timeout: int = 300, model: str | None = None) -> st
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
     if model:
         cmd += ["--model", model]
-    result = subprocess.run(
-        cmd + ["-"],
-        input=prompt,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=timeout,
-    )
+    # リポジトリの CLAUDE.md（予約投稿時代の手順書）を読み込ませないよう、空のフォルダで実行する
+    with tempfile.TemporaryDirectory() as workdir:
+        result = subprocess.run(
+            cmd + ["-"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+            cwd=workdir,
+        )
     if result.returncode != 0:
         print(f"ERROR: claude CLI failed (model={model or 'default'})\n{result.stderr}", file=sys.stderr)
         if model:
@@ -442,6 +450,9 @@ REVIEW_PROMPT = """\
 - 同じ内容の繰り返し
 - 途中で切れている、または文として壊れている
 
+判定するのは上の4点だけ。文体・内容の良し悪しや事実関係は別の工程で確認済みなので、ここでは判定しない。
+平日の投稿は1行目に「ゴールド」「ドル円」「ロット計算」のような短いテーマ名を置く書き方で、これは本文の一部なのでNGにしない。
+
 1行目に OK または NG とだけ書き、NGの場合は2行目に理由を書いてください。
 """
 
@@ -513,7 +524,10 @@ def build_generate_prompt(date_str: str, slot: str) -> str:
     )
     if INSIGHTS_PATH.exists():
         insights = INSIGHTS_PATH.read_text(encoding="utf-8")
-        base += f"\n\n---\n\n## 過去分析インサイト（毎週更新）\n\n{insights}"
+        base += (
+            "\n\n---\n\n## 先週の反応分析からの改善方針（毎週日曜に更新。上のルールと食い違う場合は上のルールを優先）\n\n"
+            + insights
+        )
     return base
 
 
@@ -693,6 +707,9 @@ def main():
     print("\n[STEP 4] X に投稿中...")
     tweet_id = post_to_x(verified_text)
     print(f"\n✅ 投稿完了: https://x.com/hajime_cp/status/{tweet_id}")
+    with open(POSTED_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"id": tweet_id, "posted_at": datetime.now(JST).isoformat(timespec="seconds"),
+                            "slot": slot, "text": verified_text}, ensure_ascii=False) + "\n")
 
 
 if __name__ == "__main__":

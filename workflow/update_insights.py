@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 多角的分析結果を workflow/insights.md に書き込む
-analyze_posts.py と同じロジックを内包して単独実行可能
+週次レビュー（weekly_review.py）から長期データの集計に使う
 """
 
 import os
