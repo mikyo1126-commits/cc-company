@@ -165,7 +165,7 @@ def generate_md(data, total):
     if auto_ranking:
         best, scores = auto_ranking[0]
         md += f"→ **自動投稿で扱うテーマの中では{best}の反応が最も良い（平均{sum(scores)/len(scores):.1f}pt）。同じくらい動きがある日は{best}を優先**\n"
-    md += """
+    md += f"""
 
 ---
 

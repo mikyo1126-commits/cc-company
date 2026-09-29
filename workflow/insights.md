@@ -22,20 +22,7 @@
 
 ## B. 高エンゲージメント vs 低エンゲージメント 比較
 
-| 指標 | 高（上位1/3） | 低（下位1/3） | 差 |
-|---|---|---|---|
-| 文字数 | {avg(high, 'chars'):.0f}字 | {avg(low, 'chars'):.0f}字 | {diff_chars:+.0f} |
-| 行数 | {avg(high, 'lines'):.1f}行 | {avg(low, 'lines'):.1f}行 | {avg(high,'lines')-avg(low,'lines'):+.1f} |
-| 段落数 | {avg(high, 'paragraphs'):.1f} | {avg(low, 'paragraphs'):.1f} | {avg(high,'paragraphs')-avg(low,'paragraphs'):+.1f} |
-| 空行あり | {pct(high, 'has_blank_line')}% | {pct(low, 'has_blank_line')}% | {diff_blank:+}% |
-| 絵文字あり | {pct(high, 'has_emoji')}% | {pct(low, 'has_emoji')}% | {diff_emoji:+}% |
-| 疑問文あり | {pct(high, 'has_question')}% | {pct(low, 'has_question')}% | {diff_quest:+}% |
-| 具体数値あり | {pct(high, 'has_specific_number')}% | {pct(low, 'has_specific_number')}% | {diff_num:+}% |
-| 口語スコア | {avg(high, 'colloquial_score'):.2f} | {avg(low, 'colloquial_score'):.2f} | {diff_coll:+.2f} |
-| チャート用語 | {avg(high, 'chart_terms'):.2f} | {avg(low, 'chart_terms'):.2f} | {diff_chart:+.2f} |
-| 感情表現 | {avg(high, 'emotion_score'):.2f} | {avg(low, 'emotion_score'):.2f} | {diff_emot:+.2f} |
-| 体験談表現 | {avg(high, 'personal_score'):.2f} | {avg(low, 'personal_score'):.2f} | {diff_pers:+.2f} |
-| 不確実表現 | {avg(high, 'uncertainty_score'):.2f} | {avg(low, 'uncertainty_score'):.2f} | {diff_unc:+.2f} |
+（比較表は集計の不具合で壊れていたため削除。次回の週次分析で作り直される）
 
 ### ✅ 高エンゲに多いパターン（差がプラスの項目）
 
