@@ -404,6 +404,7 @@ ALLOWED_ASCII_WORDS = {
     "NASDAQ", "VIX", "S", "P",
     "QT", "QE", "YCC", "BOE", "OPEC", "WTI", "IMF",
     "PIPS", "PIP", "LOT",
+    "TOPIX", "SOX", "AI", "PMI", "ADP", "JOLTS", "GAFAM", "EV", "US", "EU", "UK",
 }
 
 
@@ -484,8 +485,9 @@ def extract_post(raw: str) -> str | None:
 
 def draft_with_claude(prompt: str) -> str:
     """<post>タグ内の本文だけを取り出し、機械チェック＋別AIの目視チェックを通す。3回ダメなら投稿中止"""
+    feedback = ""
     for attempt in range(1, 4):
-        raw = call_claude(prompt + OUTPUT_RULE)
+        raw = call_claude(prompt + OUTPUT_RULE + feedback)
         post = extract_post(raw)
         problems = find_problems(post) if post is not None else ["<post>タグが1つではない"]
         if not problems:
@@ -494,6 +496,12 @@ def draft_with_claude(prompt: str) -> str:
                 return post
             problems = [f"レビューNG: {review}"]
         print(f"\n[FORMAT NG {attempt}/3] {problems}\n--- raw ---\n{raw}\n{'-'*40}")
+        feedback = (
+            "\n\n---\n\n## 前回の下書きは次の理由で使えなかった。この点を直して書き直す\n"
+            + (f"<前回の下書き>\n{post}\n</前回の下書き>\n" if post else "")
+            + "\n".join(f"- {p}" for p in problems)
+            + "\n（英字の略語が原因の場合は、カタカナや日本語の言い方に置き換える）"
+        )
     print("❌ 本文以外の混入を解消できなかったため投稿を中止します", file=sys.stderr)
     sys.exit(1)
 
