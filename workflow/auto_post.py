@@ -431,7 +431,10 @@ def find_problems(post: str, weekend: bool | None = None) -> list[str]:
                 problems.append(f"{label}: {line.strip()}")
     if re.search(r"[⚠❌]", post):
         problems.append("⚠️・❌ は事実確認の判定記号と紛らわしいので使わない")
-    if len(re.findall(r"[\U0001F300-\U0001FAFF☀-➿‼]", post)) > 2:
+    emoji_count = len(re.findall(r"[\U0001F300-\U0001FAFF☀-➿‼]", post))
+    if emoji_count and is_no_emoji_day(datetime.now(JST).strftime("%Y-%m-%d")):
+        problems.append("今週は絵文字を使わない")
+    elif emoji_count > 2:
         problems.append("絵文字が多すぎる（2個まで）")
     for line in lines:
         if "仮に" not in line and re.search(PRICE_LEVEL, line):
@@ -519,7 +522,17 @@ EMOJI_PALETTE = {
 }
 
 
+# 絵文字なしで投稿する期間（はじめさん側の指示による試み。期間が過ぎると通常の使い方に戻る）
+NO_EMOJI_PERIODS = [("2026-10-05", "2026-10-11")]
+
+
+def is_no_emoji_day(date_str: str) -> bool:
+    return any(start <= date_str <= end for start, end in NO_EMOJI_PERIODS)
+
+
 def emoji_rule_for(date_str: str, slot: str) -> str:
+    if is_no_emoji_day(date_str):
+        return "- 今週の投稿は絵文字を1つも使わない（絵文字なしの反応を確かめる週のため）"
     # 日付とスロットで決まる乱数（作り直しても同じ回は同じ方針になる）
     rng = random.Random(f"{date_str}-{slot}")
     if rng.random() < 0.2:
