@@ -85,6 +85,10 @@ GENERATE_PROMPT = """\
 
 フォローしてくれる新しい人の多くはFX未経験者。一度読んだだけで、そのままの意味で分かる文章にする。
 - 1行目は、FXを知らない人でも一読で意味が分かり、「え、なんで？」と続きを読みたくなる一文にする。専門用語・計算が必要な数字・回りくどい言い方は1行目に入れない
+  - 1行目は20文字以内（スマホで1行に収まる長さ）。言いたいことは1つだけにして短く言い切る。「〜のに〜」「〜で〜して〜」のように2つ以上のことを1文に詰めない
+  - 平日の値動きの投稿で1行目にテーマ名（「ゴールド」等）を置く場合は、その次の行を20文字以内の一文にする
+  - ✗「仕事の増え方が予想よりかなり少なかったのに金は先週むしろ下がった」（38文字。2つのことが入っていて一読で分からない）→ ○「悪いニュースなのに金が下がった」
+  - ✗「口座が一番削られるのは、負けた直後の1回」→ ○「負けた直後が一番危ない」
   - ✗「口座が一番削られるのは、負けた直後の1回」（「削られる」「1回」が何を指すか分からない）
   - ✗「勝率7割あるのに口座が減っていく人、だいたい損切りが利確より広い」（「損切り」「利確」が未経験者に通じない）
   - ✗「含み益が一晩で消える人は、やけに多い」（「含み益」が通じない）
@@ -441,6 +445,13 @@ def find_problems(post: str, weekend: bool | None = None) -> list[str]:
         weekend = datetime.now(JST).weekday() >= 5
     if weekend and lines[0].strip() in THEME_TITLES:
         problems.append(f"土日は1行目にテーマ名を書かない: {lines[0].strip()}")
+    body_lines = [l.strip() for l in lines if l.strip()]
+    if body_lines and body_lines[0] in THEME_TITLES:
+        body_lines = body_lines[1:]
+    if body_lines:
+        hook = re.sub(r"[\U0001F300-\U0001FAFF☀-➿‼\uFE0F\s]", "", body_lines[0])
+        if len(hook) > 20:
+            problems.append(f"1行目が長い（{len(hook)}文字。20文字以内の一文にする）: {body_lines[0]}")
     if lines[0].strip() in BASICS_LABELS:
         problems.append(f"1行目がラベルだけ（続きを読みたくなる一文にする）: {lines[0].strip()}")
     for pattern, label in FORBIDDEN_PATTERNS:
