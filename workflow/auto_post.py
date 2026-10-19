@@ -181,7 +181,7 @@ FOMCの初動の下落でも崩れなかった
 
 ---
 
-今日: {date}（{slot_label}）
+今日: {date}（{weekday_label}曜日・{slot_label}）
 """
 
 WEEKDAY_THEME = """平日の投稿は、下の【初心者向けの基礎】か【失敗談】が基本。相場の値動きの投稿は、急騰・急落と言える大きな値動きがあった時だけにする。
@@ -379,23 +379,28 @@ def call_claude(prompt: str, timeout: int = 300, model: str | None = None) -> st
     cmd = ["claude", "--print", "--dangerously-skip-permissions"]
     if model:
         cmd += ["--model", model]
-    # リポジトリの CLAUDE.md（予約投稿時代の手順書）を読み込ませないよう、空のフォルダで実行する
-    with tempfile.TemporaryDirectory() as workdir:
-        result = subprocess.run(
-            cmd + ["-"],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=timeout,
-            cwd=workdir,
-        )
-    if result.returncode != 0:
-        print(f"ERROR: claude CLI failed (model={model or 'default'})\n{result.stderr}", file=sys.stderr)
-        if model:
-            raise RuntimeError(result.stderr)
-        sys.exit(result.returncode)
-    return result.stdout.strip()
+    # 一時的な失敗（混雑・利用上限など）に備えて、間をあけて3回まで試す
+    for attempt in range(1, 4):
+        # リポジトリの CLAUDE.md（予約投稿時代の手順書）を読み込ませないよう、空のフォルダで実行する
+        with tempfile.TemporaryDirectory() as workdir:
+            result = subprocess.run(
+                cmd + ["-"],
+                input=prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=timeout,
+                cwd=workdir,
+            )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        print(f"ERROR: claude CLI failed (model={model or 'default'}, attempt {attempt}/3, exit {result.returncode})\n"
+              f"stderr: {result.stderr.strip()[-1000:]}\nstdout: {result.stdout.strip()[-1000:]}", file=sys.stderr)
+        if attempt < 3:
+            time.sleep(90 * attempt)
+    if model:
+        raise RuntimeError(result.stderr or result.stdout)
+    sys.exit(result.returncode)
 
 
 MAX_POST_CHARS = 250
@@ -578,13 +583,34 @@ def emoji_rule_for(date_str: str, slot: str) -> str:
     )
 
 
+def recent_auto_posts(date_str: str, days: int = 7) -> str:
+    if not POSTED_LOG.exists():
+        return ""
+    since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    out = []
+    for line in POSTED_LOG.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        e = json.loads(line)
+        if e.get("posted_at", "")[:10] >= since:
+            out.append(f"[{e['posted_at'][:16].replace('T', ' ')} {SLOT_LABELS.get(e.get('slot'), '')}]\n{e['text']}")
+    return "\n\n".join(out)
+
+
 def build_generate_prompt(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
+    weekday_label = "月火水木金土日"[datetime.strptime(date_str, "%Y-%m-%d").weekday()]
     base = GENERATE_PROMPT.format(
-        date=date_str, slot=slot, slot_label=slot_label,
+        date=date_str, slot=slot, slot_label=slot_label, weekday_label=weekday_label,
         theme_rule=theme_rule_for(date_str, slot),
         emoji_rule=emoji_rule_for(date_str, slot),
     )
+    recent = recent_auto_posts(date_str)
+    if recent:
+        base += (
+            "\n\n---\n\n## 直近7日の自動投稿（同じテーマ・同じ切り口・同じ1行目や締めの言い回しを使わない）\n\n"
+            + recent
+        )
     if INSIGHTS_PATH.exists():
         insights = INSIGHTS_PATH.read_text(encoding="utf-8")
         base += (
