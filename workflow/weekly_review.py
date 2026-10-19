@@ -31,7 +31,7 @@ FIXED_RULES = """\
 - ビットコイン・仮想通貨は扱わない（はじめさん本人が投稿しているため）
 - 価格や価格の水準は数字で書かない
 - 価格分析の投稿では、自分のエントリー時期（「ここから入りたい」等）を書かない
-- 絵文字は1投稿2個まで。事実は2つ以上のソースで確認したものだけ
+- 絵文字は1投稿0〜2個（絵文字なしの試行は10/11で終了。使う・使わないを方針で変えない）。事実は2つ以上のソースで確認したものだけ
 - 語尾は言い切る（「っぽい」「かも」「気がする」は使わない。見通しは「〜そうだ」）。ただし将来の値動きは断定しない
 - 読者はFX未経験者も含む。1行目は24文字以内で、未経験者でも一読で分かり続きを読みたくなる一文（言いたいことは1つ。「いつ・何をした時」と「どうなるか」を具体的に）。専門用語・pips・計算が必要な数字（％計算など）は使わず、円の金額や普段の言葉で書く
 - 投稿時刻は毎日 9:00 と 18:00（日本時間）
@@ -51,6 +51,9 @@ ANALYSIS_PROMPT = """\
 
 ## 長期データ（直近の投稿全体の集計。テーマ別・時間帯別・曜日別）
 {long_term}
+
+## 前の週のレポート（週ごとの比較に使う）
+{previous_report}
 
 ## 前回の分析で決めた改善方針
 {previous}
@@ -181,11 +184,13 @@ def main():
     ) if tweets else ""
     long_term = pick_sections(long_term_all, ("A.", "D.", "E."))
     previous = INSIGHTS_PATH.read_text(encoding="utf-8") if INSIGHTS_PATH.exists() else "（なし）"
+    older = sorted(p for p in REPORTS_DIR.glob("*.md") if p.name < report_path.name) if REPORTS_DIR.exists() else []
+    previous_report = older[-1].read_text(encoding="utf-8") if older else "（なし）"
 
     prompt = ANALYSIS_PROMPT.format(
         start=f"{start:%m/%d}", end=f"{end - timedelta(days=1):%m/%d}",
         fixed_rules=FIXED_RULES, posts=format_posts(rows),
-        long_term=long_term or "（なし）", previous=previous,
+        long_term=long_term or "（なし）", previous=previous, previous_report=previous_report,
     )
     analysis = run_analysis(prompt)
 

@@ -3,7 +3,7 @@ name: "X自動投稿"
 # 投稿時刻: 毎日 朝 9:00 JST / 夜 18:00 JST
 #
 # GitHubの予約実行は2〜5時間遅れ、遅れ方も一定しない。そこで各スロットで目標時刻の
-# 約6時間前から6回起動を仕掛け、「目標の30分前〜2時間後」に着いた最初の1回だけが
+# 約6時間前から6回起動を仕掛け、「目標の3時間前〜2時間後」に着いた最初の1回だけが
 # 生成・検証を済ませてから目標時刻ちょうどまで待って投稿する。早すぎ・遅すぎ・投稿済みの回は数秒で終了する。
 on:
   schedule:
@@ -48,7 +48,7 @@ jobs:
   auto-post:
     name: auto-post
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 240
     permissions:
       contents: write
 
@@ -76,8 +76,8 @@ jobs:
           NOW=$(date +%s)
           echo "SLOT=$SLOT" >> $GITHUB_ENV
           echo "slot=$SLOT" >> $GITHUB_OUTPUT
-          if [ "$NOW" -lt $((TARGET - 1800)) ]; then
-            echo "::notice::$SLOT: 目標 $TARGET_HM の30分より前に起動したので、この回は見送り（後続の起動で投稿）"
+          if [ "$NOW" -lt $((TARGET - 10800)) ]; then
+            echo "::notice::$SLOT: 目標 $TARGET_HM の3時間より前に起動したので、この回は見送り（後続の起動で投稿）"
             echo "go=false" >> $GITHUB_OUTPUT
           elif [ "$NOW" -gt $((TARGET + 7200)) ]; then
             echo "::warning::$SLOT: 目標 $TARGET_HM から2時間以上遅れて起動したので投稿しない"
