@@ -211,6 +211,7 @@ STORY_THEME = """【失敗談・人間味のある話】
 「昔これで大損した」「この失敗があって今のルールを作った」系の話にする。
 最後は、今はルール通りにトレードしているから大丈夫、という前向きな形で締める（❹の人物像を崩さない）。120〜200文字まで可。
 1行目は❷'のとおり、FXを知らない人でも一読で分かり続きを読みたくなる一文にする。ラベルにはしない
+数字（金額・回数・割合など）は一切使わない。「3,000円あった利益が」のような例の数字は、なぜその額なのか読者に分からず引っかかるため。状況と気持ちの流れ（「まだ伸びる」と待つ →「また戻る」と待つ → 利益が消える）で伝える
 {episodes}"""
 
 EPISODES_PATH = ROOT_DIR / "workflow" / "episodes.md"
@@ -445,13 +446,22 @@ BASICS_LABELS = {"証拠金", "必要証拠金", "ロット計算", "ロット",
 THEME_TITLES = {"ドル円", "ゴールド", "ナスダック", "日経平均", "日経", "金", "為替", "ドル", "米国株", "日本株", "S&P500", "FX", "ユーロドル", "ポンド円"}
 
 
-def find_problems(post: str, weekend: bool | None = None) -> list[str]:
+# 生成中の投稿の枠（generate_and_verify が設定する）。平日夜の失敗談かどうかの判定に使う
+RUN_CONTEXT: dict = {}
+
+
+def find_problems(post: str, weekend: bool | None = None, story: bool | None = None) -> list[str]:
     if not post.strip():
         return ["本文が空"]
     problems = []
     lines = post.split("\n")
     if weekend is None:
         weekend = datetime.now(JST).weekday() >= 5
+    if story is None:
+        # 平日の夜で、1行目がテーマ名（相場の投稿）でなければ失敗談
+        story = (not weekend and RUN_CONTEXT.get("slot") == "evening" and lines[0].strip() not in THEME_TITLES)
+    if story and re.search(r"[0-9０-９]|[一二三四五六七八九十百千万]+(円|回|倍|割|%|％|連勝|連敗)", post):
+        problems.append("夜の失敗談に数字が入っている（金額・回数などの数字は使わず、状況と気持ちの流れで書く）")
     if weekend and lines[0].strip() in THEME_TITLES:
         problems.append(f"土日は1行目にテーマ名を書かない: {lines[0].strip()}")
     body_lines = [l.strip() for l in lines if l.strip()]
@@ -717,6 +727,7 @@ def spar(rules: str, draft: str) -> str:
 
 def generate_and_verify(date_str: str, slot: str) -> str:
     slot_label = SLOT_LABELS[slot]
+    RUN_CONTEXT["slot"] = slot
 
     print(f"\n[STEP 1] 投稿生成中 ({slot_label})...")
     rules = build_generate_prompt(date_str, slot)
