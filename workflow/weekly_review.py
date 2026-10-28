@@ -28,6 +28,7 @@ POSTED_LOG = ROOT_DIR / "workflow" / "posted_log.jsonl"
 ANALYST_MODEL = os.environ.get("ANALYST_MODEL", "claude-opus-5-5")
 
 FIXED_RULES = """\
+- 最優先: 日本語として自然な文章にする。文体やはじめさんらしさのルールのために不自然な日本語にする提案はしない
 - ビットコイン・仮想通貨は扱わない（はじめさん本人が投稿しているため）
 - 価格や価格の水準は数字で書かない
 - 価格分析の投稿では、自分のエントリー時期（「ここから入りたい」等）を書かない
