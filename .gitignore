@@ -5,3 +5,4 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 packages/dashboard/dist/
 __pycache__/
+.nfp-posted

@@ -27,7 +27,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
-SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩"}
+SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩", "nfp_followup": "米雇用統計の発表直後"}
 ROOT_DIR = Path(__file__).parent.parent
 INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
 POSTED_LOG = ROOT_DIR / "workflow" / "posted_log.jsonl"
@@ -292,7 +292,23 @@ WEEKEND_THEMES = {
 }
 
 
+NFP_FOLLOWUP_THEME = """この投稿は、さっき発表された米雇用統計（{month_label}分）の結果を受けて、今後どんな動きが出てきそうかを書く投稿。
+米労働省の公式発表の結果: 雇用者数 {payrolls}（予想 {payrolls_fc}）、失業率 {rate}（予想 {rate_fc}）。
+雇用者数と失業率の結果は公式発表から取ったもので正しい。書く時はこの表記のまま使う。
+- 結果の数字だけの速報はもう投稿してある。数字の羅列はくり返さず、「予想より強かった・弱かった」が何を意味するかを中心に書く
+- アメリカの利下げ・利上げの見方がどう変わりそうか、それを受けてドル円・ゴールド・ナスダックがどちらに動きそうかを「〜そうだ」「〜と見ている」で書く
+- 発表直後の値動きの向きに触れる場合は、2つ以上のソースで確認できたものだけにする（価格の数字は書かない）
+- 1行目は❷'のとおり24文字以内のつかみの一文にする（テーマ名の見出しは置かない）
+- 120〜200文字まで可
+- 自分がいつエントリーするかは書かない。将来の値動きは断定しない"""
+
+# nfp.py が速報の結果を入れる（雇用統計のあとの見通し投稿に使う）
+NFP_CONTEXT: dict = {}
+
+
 def theme_rule_for(date_str: str, slot: str) -> str:
+    if slot == "nfp_followup":
+        return NFP_FOLLOWUP_THEME.format(**NFP_CONTEXT)
     weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
     if weekday < 5:
         # 大きな値動きがない日は、朝は初心者向けの基礎、夜は失敗談
@@ -779,6 +795,12 @@ def generate_and_verify(date_str: str, slot: str) -> str:
     sys.exit(1)
 
 
+def record_post(tweet_id: str, slot: str, text: str) -> None:
+    with open(POSTED_LOG, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"id": tweet_id, "posted_at": datetime.now(JST).isoformat(timespec="seconds"),
+                            "slot": slot, "text": text}, ensure_ascii=False) + "\n")
+
+
 def post_to_x(text: str) -> str:
     client = tweepy.Client(
         consumer_key=os.environ["TWITTER_API_KEY"],
@@ -831,9 +853,7 @@ def main():
     print("\n[STEP 4] X に投稿中...")
     tweet_id = post_to_x(verified_text)
     print(f"\n✅ 投稿完了: https://x.com/hajime_cp/status/{tweet_id}")
-    with open(POSTED_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps({"id": tweet_id, "posted_at": datetime.now(JST).isoformat(timespec="seconds"),
-                            "slot": slot, "text": verified_text}, ensure_ascii=False) + "\n")
+    record_post(tweet_id, slot, verified_text)
 
 
 if __name__ == "__main__":

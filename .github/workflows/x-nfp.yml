@@ -1,0 +1,113 @@
+name: "米雇用統計 速報"
+
+# 雇用統計の発表日（workflow/nfp_schedule.json）に、発表から1〜3分で速報を投稿し、
+# その数分後に結果を受けた見通しの投稿をする。
+# GitHubの予約起動は遅れるため、金曜の午後に何度か起動を仕掛け、
+# 「発表の4時間半前〜10分後」に着いた最初の1回が発表まで待って投稿する。
+on:
+  schedule:
+    - cron: '7 5 * * 5'    # 金曜 14:07 JST
+    - cron: '37 6 * * 5'   # 金曜 15:37 JST
+    - cron: '7 8 * * 5'    # 金曜 17:07 JST
+    - cron: '37 9 * * 5'   # 金曜 18:37 JST
+    - cron: '7 11 * * 5'   # 金曜 20:07 JST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'test: 公式データで文面を確認するだけ（投稿しない） / run: 発表日の本番'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - run
+
+concurrency:
+  group: x-nfp
+  cancel-in-progress: false
+
+jobs:
+  nfp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: decide
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.mode }}" = "test" ]; then
+            echo "mode=test" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          python3 workflow/nfp.py check | tee -a $GITHUB_OUTPUT
+          echo "mode=run" >> $GITHUB_OUTPUT
+
+      - name: check-already-posted
+        id: marker
+        if: steps.decide.outputs.go == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .nfp-posted
+          key: nfp-${{ steps.decide.outputs.release }}
+          lookup-only: true
+
+      - name: install-deps
+        if: steps.decide.outputs.mode == 'test' || (steps.decide.outputs.go == 'true' && steps.marker.outputs.cache-hit != 'true')
+        run: pip install -r requirements.txt
+
+      - name: test
+        if: steps.decide.outputs.mode == 'test'
+        env:
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+        run: python3 workflow/nfp.py test
+
+      - uses: actions/setup-node@v4
+        if: steps.decide.outputs.go == 'true' && steps.marker.outputs.cache-hit != 'true'
+        with:
+          node-version: '20'
+
+      - name: install-claude-cli
+        if: steps.decide.outputs.go == 'true' && steps.marker.outputs.cache-hit != 'true'
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: flash-and-followup
+        if: steps.decide.outputs.go == 'true' && steps.marker.outputs.cache-hit != 'true'
+        env:
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        run: python3 workflow/nfp.py run
+
+      - name: mark-posted
+        if: always() && hashFiles('.nfp-posted') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .nfp-posted
+          key: nfp-${{ steps.decide.outputs.release }}
+
+      - name: record-post
+        if: always() && steps.decide.outputs.go == 'true'
+        run: |
+          git config user.name "hajime-bot[workflow]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workflow/posted_log.jsonl
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "log: [$(TZ=Asia/Tokyo date +%Y-%m-%d) nfp] 雇用統計の投稿を記録"
+          for i in 1 2 3 4; do
+            git pull --rebase -q origin master && git push -q origin HEAD:master && exit 0
+            sleep $((i * 5))
+          done
