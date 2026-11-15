@@ -693,8 +693,8 @@ def emoji_rule_for(date_str: str, slot: str) -> str:
 _owner_posts_cache: str | None = None
 
 
-def owner_recent_posts(hours: int = 72) -> str:
-    """はじめさん本人の直近の投稿（自動投稿は除く）。取れなければ空文字（投稿は止めない）"""
+def owner_recent_posts() -> str:
+    """はじめさん本人の今日（日本時間0時から）の投稿（自動投稿は除く）。取れなければ空文字（投稿は止めない）"""
     global _owner_posts_cache
     if _owner_posts_cache is not None:
         return _owner_posts_cache
@@ -714,19 +714,19 @@ def owner_recent_posts(hours: int = 72) -> str:
             )
             me = client.get_me(user_auth=True).data.id
             resp = client.get_users_tweets(
-                id=me, max_results=20, start_time=datetime.now(timezone.utc) - timedelta(hours=hours),
+                id=me, max_results=20, start_time=datetime.now(JST).replace(hour=0, minute=0, second=0, microsecond=0),
                 tweet_fields=["created_at", "text"], exclude=["retweets", "replies"], user_auth=True,
             )
             own = [t for t in (resp.data or []) if str(t.id) not in auto_ids]
             _owner_posts_cache = "\n\n".join(
                 f"[{t.created_at.astimezone(JST):%m/%d %H:%M}]\n{t.text}" for t in own
-            ) or "（直近3日の本人投稿はなし）"
-            print(f"はじめさん本人の直近の投稿: {len(own)}件を確認")
+            ) or "（今日の本人投稿はまだなし）"
+            print(f"はじめさん本人の今日の投稿: {len(own)}件を確認")
             return _owner_posts_cache
         except Exception as e:
             print(f"本人の投稿の取得に失敗（{attempt + 1}/2）: {e}", file=sys.stderr)
             time.sleep(10)
-    print("::warning::はじめさん本人の直近の投稿を取得できなかったため、重なりの確認なしで作成した")
+    print("::warning::はじめさん本人の今日の投稿を取得できなかったため、重なりの確認なしで作成した")
     return ""
 
 
@@ -756,7 +756,7 @@ def build_generate_prompt(date_str: str, slot: str) -> str:
     owner = owner_recent_posts()
     if owner:
         base += (
-            "\n\n---\n\n## はじめさん本人の直近3日の投稿（この投稿と同じ内容・同じ切り口にしない）\n"
+            "\n\n---\n\n## はじめさん本人の今日の投稿（この投稿と同じ内容・同じ切り口にしない）\n"
             "同じ出来事を扱う場合は、本人が書いていない角度だけで書く。角度が重なるならテーマを変える。\n\n"
             + owner
         )
@@ -808,7 +808,7 @@ CRITIQUE_PROMPT = """\
 
 X上のトレーダーと、FXをやったことがない人の両方の目線で、この下書きをより良くするための率直な指摘をしてください。見る観点:
 - 【最優先】日本語として自然か。ルールに合わせたせいで不自然な言い回し・無理な言い換え・おかしな語尾になっていないか。なっていれば、自然な日本語に直す案を出す
-- 指示の中にある「はじめさん本人の直近3日の投稿」と、内容や切り口が重なっていないか。重なっていれば、別のテーマか本人が書いていない角度を提案する
+- 指示の中にある「はじめさん本人の今日の投稿」と、内容や切り口が重なっていないか。重なっていれば、別のテーマか本人が書いていない角度を提案する
 - 当たり前すぎないか。FXを始めたばかりの人でも知っていることなら、テーマごと変える案を出す。「〜なのに」で始まる1行目は、本当に意外なことになっているか
 - FXをやったことがない人が一度読んだだけで意味が分かるか。1行目で「え、なんで？」と引き込めるか。専門用語や、計算しないと分からない数字が残っていないか
 - 事実の正確さと、誤解を招く書き方がないか。事実が怪しいと思ったらWebSearchで確認する
