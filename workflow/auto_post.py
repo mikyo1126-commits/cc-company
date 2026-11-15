@@ -42,7 +42,7 @@ GENERATE_PROMPT = """\
 
 【いちばん大事なこと】日本語として自然な文章にすること。
 この下の文体ルール・はじめさんらしさのルール・週ごとの改善方針と、日本語の自然さがぶつかる時は、自然さを優先する。ルールに合わせるために、不自然な言い回し・無理な言い換え・無理に入れた口語・不自然な語尾にはしない。
-ただし、事実の正確さ、ビットコインを扱わない、価格の数字を書かない、自分のエントリー時期を書かない、将来の値動きを断定しない、の5つは自然さより優先して必ず守る。
+ただし、事実の正確さ、ビットコイン・仮想通貨の扱いのルール（STEP 1）、価格の数字を書かない、自分のエントリー時期を書かない、将来の値動きを断定しない、の5つは自然さより優先して必ず守る。
 
 あわせて、この投稿はAIが書いたと気づかれてはいけない。
 トレーダー本人が今この瞬間に感じたこと・気づいたことをそのまま書いたような「人間らしい文章」にすること。
@@ -53,8 +53,7 @@ GENERATE_PROMPT = """\
 
 {theme_rule}
 
-ビットコイン・仮想通貨は扱わない（はじめさん本人がビットコインの投稿をしていて、内容がぶつかるため）。
-過去分析インサイトにビットコインの話が出てきても、それは参考データとしてだけ読み、テーマには選ばない。
+{crypto_policy}
 
 確認したら:
 - **数値を使う場合は必ず2つ以上の独立したソースで裏取りする**
@@ -315,9 +314,57 @@ NFP_FOLLOWUP_THEME = """この投稿は、さっき発表された米雇用統�
 NFP_CONTEXT: dict = {}
 
 
+# 仮想通貨の暴落中だけ、仮想通貨の暴落ネタを増やす期間（はじめさん側の指示。期間は延長・短縮できる）
+CRYPTO_CRASH_UNTIL = "2026-11-29"
+
+
+def is_crypto_mode(date_str: str) -> bool:
+    return date_str <= CRYPTO_CRASH_UNTIL
+
+
+CRYPTO_NORMAL_POLICY = """ビットコイン・仮想通貨は扱わない（はじめさん本人がビットコインの投稿をしていて、内容がぶつかるため）。
+過去分析インサイトにビットコインの話が出てきても、それは参考データとしてだけ読み、テーマには選ばない。"""
+
+CRYPTO_CRASH_POLICY = """ビットコイン・仮想通貨は、下の【仮想通貨の暴落中の特別ルール】がある投稿でだけ扱う。それ以外の投稿では扱わない。"""
+
+CRYPTO_CRASH_HEADER = """【仮想通貨の暴落中の特別ルール（{until}まで）】
+仮想通貨が暴落していて読者の関心が高いので、この投稿は仮想通貨の暴落をテーマにする。
+まずWebSearchで、ビットコインなどの仮想通貨の下落が今も続いているか（直近の高値から大きく下がったまま、または下げ続けているか）を2つ以上のソースで確認する。
+下落が落ち着いて「暴落」と言えなくなっていたら、この特別ルールは使わず、下の【通常の内容】で書く（仮想通貨には触れない）。
+
+暴落が続いている場合の書き方:
+- {angle}
+- はじめさん本人はビットコインのチャート分析を投稿しているので、内容が重ならないよう、チャートの節目や今後の値段の予想は書かない
+- 価格の数字は書かない。下落の大きさは「直近の高値から3割近く下がった」のように、2つ以上のソースで確認できた割合なら書いてよい
+- 「今が買い場」「ここで買うべき」のような売買を勧める言い方はしない。取引所や業者の名前も出さない
+
+【通常の内容】（暴落が落ち着いていた場合）
+"""
+
+CRYPTO_ANGLES = {
+    "weekday_morning": "なぜ下がっているのかを「出来事 → お金の流れ → 値動き」の1本の流れで普段の言葉で説明する。ドル円・ゴールド・ナスダックにも影響が出ていれば、そのつながりも書く。1行目は24文字以内のつかみの一文にする",
+    "weekday_evening": "暴落の時に初心者がやりがちな失敗（下がったから安いとナンピンする、ロットを上げたまま持ち続けてロスカットになる、SNSの「もう底」の声に飛びつく等）を、下の【失敗談】の形（「以前の僕がやった失敗談」の見出し、数字は使わない）で書く",
+    "weekend": "今週の仮想通貨の暴落が、なぜ起きたか・ドル円やゴールドやナスダックなど他の市場とどうつながったかの切り口で書く",
+}
+
+
 def theme_rule_for(date_str: str, slot: str) -> str:
     if slot == "nfp_followup":
         return NFP_FOLLOWUP_THEME.format(**NFP_CONTEXT)
+    normal = normal_theme_rule(date_str, slot)
+    weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
+    if is_crypto_mode(date_str):
+        if weekday < 5 and slot in ("morning", "evening"):
+            angle = CRYPTO_ANGLES["weekday_" + slot]
+        elif (weekday, slot) in ((5, "evening"), (6, "morning")):
+            angle = CRYPTO_ANGLES["weekend"]
+        else:
+            return normal
+        return CRYPTO_CRASH_HEADER.format(until=CRYPTO_CRASH_UNTIL, angle=angle) + normal
+    return normal
+
+
+def normal_theme_rule(date_str: str, slot: str) -> str:
     weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
     if weekday < 5:
         # 大きな値動きがない日は、朝は初心者向けの基礎、夜は失敗談
@@ -451,7 +498,7 @@ MAX_POST_CHARS = 250
 
 # 相場の価格水準（160円方向、156円台、3,500ドル付近、20,000ポイント など）。損益額などの金額は対象外
 PRICE_LEVEL = (
-    r"(\d{2,3}(\.\d+)?円|\d[\d,]*(\.\d+)?(ドル|ポイント|pt))"
+    r"(\d{2,3}(\.\d+)?円|\d[\d,]*(\.\d+)?万?(ドル|ポイント|pt)|\d[\d,]*万円(?=台))"
     r"(台|方向|手前|付近|ちょうど|まで|前後|近辺|割れ|突破|回復|到達|超え|を(上|下|割|超|抜|試|回|付)|で(止|跳|反|押|頭|底)|から|へ|に(到|迫|接|届|乗|戻|タッチ)|が(壁|節目|目の前|視野|意識))"
 )
 
@@ -470,7 +517,6 @@ FORBIDDEN_PATTERNS = [
     (r"[るたいだ]そうだ|らしい", "伝聞の「〜そうだ／らしい」（事実は言い切る。「そうだ」は「なりそうだ」のような見通しにだけ使う）"),
     (r"そう[\s\U0001F300-\U0001FAFF\u2600-\u27BF\u203C\uFE0F]*$", "「〜そう」で終わる行（「〜そうだ」にする）"),
     (r"(入り|エントリーし|拾い|乗り|買い|売り|仕掛け|狙い)たい|入ろう|入るつもり|(入る|乗る|エントリーする)予定|から(入る|乗る|エントリーする|拾う)\s*$", "自分のエントリー時期（価格分析の投稿には書かない）"),
-    (r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|アルトコイン|ビトコ", "ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）"),
 ]
 
 # 投稿に出てきてよい英字（これ以外の英単語が入っていたらAIの説明文とみなす）
@@ -486,7 +532,7 @@ ALLOWED_ASCII_WORDS = {
 BASICS_LABELS = {"証拠金", "必要証拠金", "ロット計算", "ロット", "スワップ", "レバレッジ", "pips", "損切り", "損切り幅",
                  "維持率", "ロスカット", "資金管理", "ナンピン", "FXの基礎", "基礎", "失敗談"}
 
-THEME_TITLES = {"ドル円", "ゴールド", "ナスダック", "日経平均", "日経", "金", "為替", "ドル", "米国株", "日本株", "S&P500", "FX", "ユーロドル", "ポンド円"}
+THEME_TITLES = {"ビットコイン", "仮想通貨", "ドル円", "ゴールド", "ナスダック", "日経平均", "日経", "金", "為替", "ドル", "米国株", "日本株", "S&P500", "FX", "ユーロドル", "ポンド円"}
 
 
 # 生成中の投稿の枠（generate_and_verify が設定する）。平日夜の失敗談かどうかの判定に使う
@@ -530,7 +576,12 @@ def find_problems(post: str, weekend: bool | None = None, story: bool | None = N
     for line in lines:
         if "仮に" not in line and re.search(PRICE_LEVEL, line):
             problems.append(f"価格の数字（書かないルール）: {line.strip()}")
+    crypto_ok = is_crypto_mode(datetime.now(JST).strftime("%Y-%m-%d"))
+    if not crypto_ok and re.search(r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|アルトコイン|ビトコ", post):
+        problems.append("ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）")
     for word in re.findall(r"[A-Za-z]+", post):
+        if crypto_ok and word.upper() in ("BTC", "ETH"):
+            continue
         if word.upper() not in ALLOWED_ASCII_WORDS:
             problems.append(f"想定外の英単語: {word}")
     seen = set()
@@ -659,6 +710,7 @@ def build_generate_prompt(date_str: str, slot: str) -> str:
     base = GENERATE_PROMPT.format(
         date=date_str, slot=slot, slot_label=slot_label, weekday_label=weekday_label,
         theme_rule=theme_rule_for(date_str, slot),
+        crypto_policy=CRYPTO_CRASH_POLICY if is_crypto_mode(date_str) else CRYPTO_NORMAL_POLICY,
         emoji_rule=emoji_rule_for(date_str, slot),
     )
     recent = recent_auto_posts(date_str)
