@@ -328,7 +328,7 @@ CRYPTO_NORMAL_POLICY = """ビットコイン・仮想通貨は扱わない（は
 CRYPTO_CRASH_POLICY = """ビットコイン・仮想通貨は、下の【仮想通貨の暴落中の特別ルール】がある投稿でだけ扱う。それ以外の投稿では扱わない。"""
 
 CRYPTO_CRASH_HEADER = """【仮想通貨の暴落中の特別ルール（{until}まで）】
-仮想通貨が暴落していて読者の関心が高いので、この投稿は仮想通貨の暴落をテーマにする。
+仮想通貨が暴落していて読者の関心が高いので、この投稿は仮想通貨の暴落をテーマにする（ビットコインだけでなく、イーサリアム・リップルなど、その時に動きや話題が大きい通貨から選ぶ。毎回ビットコインにしない）。
 まずWebSearchで、ビットコインなどの仮想通貨の下落が今も続いているか（直近の高値から大きく下がったまま、または下げ続けているか）を2つ以上のソースで確認する。
 下落が落ち着いて「暴落」と言えなくなっていたら、この特別ルールは使わず、下の【通常の内容】で書く（仮想通貨には触れない）。
 
@@ -345,6 +345,8 @@ CRYPTO_ANGLES = {
     "weekday_morning": "なぜ下がっているのかを「出来事 → お金の流れ → 値動き」の1本の流れで普段の言葉で説明する。ドル円・ゴールド・ナスダックにも影響が出ていれば、そのつながりも書く。1行目は24文字以内のつかみの一文にする",
     "weekday_evening": "暴落の時に初心者がやりがちな失敗（下がったから安いとナンピンする、ロットを上げたまま持ち続けてロスカットになる、SNSの「もう底」の声に飛びつく等）を、下の【失敗談】の形（「以前の僕がやった失敗談」の見出し、数字は使わない）で書く",
     "weekend": "今週の仮想通貨の暴落が、なぜ起きたか・ドル円やゴールドやナスダックなど他の市場とどうつながったかの切り口で書く",
+    "saturday_morning": "今週の仮想通貨の暴落のまとめ。ビットコイン・イーサリアム・リップルなどについて、それぞれ「何があって、どう動いたか」を1〜2行ずつ普段の言葉で書く",
+    "sunday_evening": "来週の仮想通貨に関係する注目イベント（アメリカの金利の発表、仮想通貨の規制のニュースなど）を、2つ以上のソースで日時を確かめて「〜なら〜そうだ」の場合分けで書く",
 }
 
 
@@ -354,9 +356,14 @@ def theme_rule_for(date_str: str, slot: str) -> str:
     normal = normal_theme_rule(date_str, slot)
     weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
     if is_crypto_mode(date_str):
+        # 暴落中は朝・夜の投稿をすべて仮想通貨にする（はじめさん側の指示）
         if weekday < 5 and slot in ("morning", "evening"):
             angle = CRYPTO_ANGLES["weekday_" + slot]
-        elif (weekday, slot) in ((5, "evening"), (6, "morning")):
+        elif (weekday, slot) == (5, "morning"):
+            angle = CRYPTO_ANGLES["saturday_morning"]
+        elif (weekday, slot) == (6, "evening"):
+            angle = CRYPTO_ANGLES["sunday_evening"]
+        elif slot in ("morning", "evening"):
             angle = CRYPTO_ANGLES["weekend"]
         else:
             return normal
@@ -580,7 +587,7 @@ def find_problems(post: str, weekend: bool | None = None, story: bool | None = N
     if not crypto_ok and re.search(r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|アルトコイン|ビトコ", post):
         problems.append("ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）")
     for word in re.findall(r"[A-Za-z]+", post):
-        if crypto_ok and word.upper() in ("BTC", "ETH"):
+        if crypto_ok and word.upper() in ("BTC", "ETH", "XRP", "SOL"):
             continue
         if word.upper() not in ALLOWED_ASCII_WORDS:
             problems.append(f"想定外の英単語: {word}")
