@@ -2,25 +2,27 @@ name: "X自動投稿"
 
 # 投稿時刻: 毎日 朝 9:00 JST / 夜 18:00 JST
 #
-# GitHubの予約実行は2〜5時間遅れ、遅れ方も一定しない。そこで各スロットで目標時刻の
-# 約6時間前から6回起動を仕掛け、「目標の3時間前〜2時間後」に着いた最初の1回だけが
-# 生成・検証を済ませてから目標時刻ちょうどまで待って投稿する。早すぎ・遅すぎ・投稿済みの回は数秒で終了する。
+# GitHubの予約実行は数時間〜半日遅れ、遅れ方も一定しない。そこで1日中ほぼ1時間半おきに起動を仕掛け、
+# 届いた起動が「次の投稿時刻の5時間前〜2時間後」なら、その投稿時刻の分を担当する（朝用・夜用を分けない）。
+# 生成・検証を済ませてから投稿時刻ちょうどまで待って投稿する。それ以外の時間・投稿済みの回は数秒で終了する。
 on:
   schedule:
-    # 朝 9:00 JST (= 00:00 UTC) 向け
-    - cron: '7 18 * * *'
-    - cron: '17 19 * * *'
-    - cron: '27 20 * * *'
-    - cron: '37 21 * * *'
-    - cron: '47 22 * * *'
-    - cron: '37 23 * * *'
-    # 夜 18:00 JST (= 09:00 UTC) 向け
+    - cron: '7 0 * * *'
+    - cron: '37 1 * * *'
     - cron: '7 3 * * *'
-    - cron: '17 4 * * *'
-    - cron: '27 5 * * *'
-    - cron: '37 6 * * *'
-    - cron: '47 7 * * *'
-    - cron: '37 8 * * *'
+    - cron: '37 4 * * *'
+    - cron: '7 6 * * *'
+    - cron: '37 7 * * *'
+    - cron: '7 9 * * *'
+    - cron: '37 10 * * *'
+    - cron: '7 12 * * *'
+    - cron: '37 13 * * *'
+    - cron: '7 15 * * *'
+    - cron: '37 16 * * *'
+    - cron: '7 18 * * *'
+    - cron: '37 19 * * *'
+    - cron: '7 21 * * *'
+    - cron: '37 22 * * *'
   workflow_dispatch:
     inputs:
       slot:
@@ -48,7 +50,7 @@ jobs:
   auto-post:
     name: auto-post
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 340
     permissions:
       contents: write
 
@@ -67,25 +69,27 @@ jobs:
             echo "go=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          case "${{ github.event.schedule }}" in
-            "7 18 * * *"|"17 19 * * *"|"27 20 * * *"|"37 21 * * *"|"47 22 * * *"|"37 23 * * *") SLOT=morning; TARGET_HM="09:00" ;;
-            "7 3 * * *"|"17 4 * * *"|"27 5 * * *"|"37 6 * * *"|"47 7 * * *"|"37 8 * * *")  SLOT=evening; TARGET_HM="18:00" ;;
-            *) echo "::error::unknown schedule"; exit 1 ;;
-          esac
-          TARGET=$(TZ=Asia/Tokyo date -d "$DATE $TARGET_HM" +%s)
           NOW=$(date +%s)
+          SLOT=""
+          for CAND in "morning 09:00" "evening 18:00"; do
+            set -- $CAND
+            T=$(TZ=Asia/Tokyo date -d "$DATE $2" +%s)
+            if [ "$NOW" -ge $((T - 18000)) ] && [ "$NOW" -le $((T + 7200)) ]; then
+              SLOT=$1; TARGET_HM=$2; TARGET=$T
+            fi
+          done
+          if [ -z "$SLOT" ]; then
+            echo "::notice::次の投稿時刻（9:00/18:00）の5時間前〜2時間後ではないので、この回は何もしない"
+            echo "go=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           echo "SLOT=$SLOT" >> $GITHUB_ENV
           echo "slot=$SLOT" >> $GITHUB_OUTPUT
-          if [ "$NOW" -lt $((TARGET - 10800)) ]; then
-            echo "::notice::$SLOT: 目標 $TARGET_HM の3時間より前に起動したので、この回は見送り（後続の起動で投稿）"
-            echo "go=false" >> $GITHUB_OUTPUT
-          elif [ "$NOW" -gt $((TARGET + 7200)) ]; then
-            echo "::warning::$SLOT: 目標 $TARGET_HM から2時間以上遅れて起動したので投稿しない"
-            echo "go=false" >> $GITHUB_OUTPUT
-          else
-            echo "POST_AT=$TARGET" >> $GITHUB_ENV
-            echo "go=true" >> $GITHUB_OUTPUT
+          if [ "$NOW" -gt $((TARGET + 1800)) ]; then
+            echo "::warning::$SLOT: 目標 $TARGET_HM より遅れて起動したので、すぐに投稿する"
           fi
+          echo "POST_AT=$TARGET" >> $GITHUB_ENV
+          echo "go=true" >> $GITHUB_OUTPUT
 
       - name: check-already-posted
         id: marker
