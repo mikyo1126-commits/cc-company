@@ -314,12 +314,13 @@ NFP_FOLLOWUP_THEME = """この投稿は、さっき発表された米雇用統�
 NFP_CONTEXT: dict = {}
 
 
-# 朝・夜の投稿をすべて仮想通貨ネタにする期間（はじめさん側の指示。「指示するまで」なので期限なし。終わらせる時はこの日付を過去にする）
-CRYPTO_CRASH_UNTIL = "9999-12-31"
+# 仮想通貨ネタだけを投稿するかどうか（はじめさん側の指示で切り替える。中身は workflow/content_mode.json）
+CONTENT_MODE_PATH = ROOT_DIR / "workflow" / "content_mode.json"
+CRYPTO_CRASH_UNTIL = "はじめさん側から「元の投稿内容に戻して」と言われる"
 
 
 def is_crypto_mode(date_str: str) -> bool:
-    return date_str <= CRYPTO_CRASH_UNTIL
+    return bool(json.loads(CONTENT_MODE_PATH.read_text(encoding="utf-8")).get("crypto_only"))
 
 
 CRYPTO_NORMAL_POLICY = """ビットコイン・仮想通貨は扱わない（はじめさん本人がビットコインの投稿をしていて、内容がぶつかるため）。

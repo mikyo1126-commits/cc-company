@@ -47,7 +47,15 @@ def release_time(entry: dict) -> datetime:
     return datetime(y, m, d, 8, 30, tzinfo=NY)
 
 
+def crypto_only() -> bool:
+    """仮想通貨ネタだけを投稿する期間は、雇用統計の投稿も出さない（workflow/content_mode.json）"""
+    return bool(json.loads((ROOT_DIR / "workflow" / "content_mode.json").read_text(encoding="utf-8")).get("crypto_only"))
+
+
 def current_release(now: datetime) -> dict | None:
+    if crypto_only():
+        print("仮想通貨ネタだけを投稿する期間なので、雇用統計の投稿はしない")
+        return None
     for entry in load_schedule():
         at = release_time(entry)
         if at - WAIT_BEFORE <= now <= at + LATE_LIMIT:
