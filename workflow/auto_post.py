@@ -339,7 +339,10 @@ CRYPTO_CRASH_HEADER = """【仮想通貨ネタだけを投稿する期間の特�
 - 価格の数字は書かない。下落の大きさは「直近の高値から3割近く下がった」のように、2つ以上のソースで確認できた割合なら書いてよい
 - 「今が買い場」「ここで買うべき」のような売買を勧める言い方はしない。取引所や業者の名前も出さない
 
-【投稿の型】（文体・長さ・1行目・締め方は下の通常ルールに従う。ただし題材は必ず仮想通貨にする）
+【投稿の型】
+- 本文に必ず通貨名（ビットコイン・イーサリアム・リップルなど）か「仮想通貨」を入れる。仮想通貨に触れない一般的なFX・投資の話にはしない
+- 1行目は❷'のとおり24文字以内の、一読で分かるつかみの一文（「ビットコイン」などの見出しだけにはしない）
+- 本文は5行前後、120〜200文字まで可。締めは行動か見方を1行で言い切る
 """
 
 CRYPTO_ANGLES = {
@@ -368,7 +371,12 @@ def theme_rule_for(date_str: str, slot: str) -> str:
             angle = CRYPTO_ANGLES["weekend"]
         else:
             return normal
-        return CRYPTO_CRASH_HEADER.format(until=CRYPTO_CRASH_UNTIL, angle=angle) + normal
+        header = CRYPTO_CRASH_HEADER.format(until=CRYPTO_CRASH_UNTIL, angle=angle)
+        # 通常の「平日の朝は基礎」などの内容指示を付けると、そちらを優先して仮想通貨に触れない投稿になるため付けない。
+        # 夜の失敗談だけは「以前の僕がやった失敗談」の型を使うので、型の部分を付ける
+        if weekday < 5 and slot == "evening":
+            header += "\n" + STORY_THEME.format(episodes=episodes_rule()) + "\n（失敗の題材は必ず仮想通貨の取引にする）"
+        return header
     return normal
 
 
@@ -585,8 +593,11 @@ def find_problems(post: str, weekend: bool | None = None, story: bool | None = N
         if "仮に" not in line and re.search(PRICE_LEVEL, line):
             problems.append(f"価格の数字（書かないルール）: {line.strip()}")
     crypto_ok = is_crypto_mode(datetime.now(JST).strftime("%Y-%m-%d"))
-    if not crypto_ok and re.search(r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|アルトコイン|ビトコ", post):
+    mentions_crypto = re.search(r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|ソラナ|アルトコイン|ビトコ|BTC|ETH|XRP|SOL", post)
+    if not crypto_ok and mentions_crypto:
         problems.append("ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）")
+    if crypto_ok and RUN_CONTEXT.get("slot") in ("morning", "evening") and not mentions_crypto:
+        problems.append("仮想通貨ネタになっていない（今は朝・夜とも仮想通貨ネタだけ。通貨名か「仮想通貨」を本文に入れ、仮想通貨の話として書き直す）")
     for word in re.findall(r"[A-Za-z]+", post):
         if crypto_ok and word.upper() in ("BTC", "ETH", "XRP", "SOL"):
             continue
