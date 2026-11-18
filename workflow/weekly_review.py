@@ -24,6 +24,8 @@ from update_insights import analyze_tweet, generate_md, get_client  # noqa: E402
 ROOT_DIR = Path(__file__).parent.parent
 REPORTS_DIR = ROOT_DIR / "workflow" / "reports"
 INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
+INSIGHTS_CRYPTO_PATH = ROOT_DIR / "workflow" / "insights_crypto.md"
+CONTENT_MODE_PATH = ROOT_DIR / "workflow" / "content_mode.json"
 POSTED_LOG = ROOT_DIR / "workflow" / "posted_log.jsonl"
 ANALYST_MODEL = os.environ.get("ANALYST_MODEL", "claude-opus-5-5")
 
@@ -81,6 +83,17 @@ ANALYSIS_PROMPT = """\
 最後に、投稿を書くAIにそのまま渡す指示を <for_writer> と </for_writer> で囲んで書く。
 中身は「今週の改善方針」として、固定ルールの範囲内で具体的に実行できる指示を5〜8個と、今週試してみること1〜2個（効果は来週の分析で確かめる）。
 投稿の文面をそのまま真似させる書き方はしない（毎回同じような投稿になるため）。
+"""
+
+
+CRYPTO_WRITER_INSTRUCTION = """
+
+### 6. 仮想通貨ネタの期間用の指示（今は朝・夜の投稿をすべて仮想通貨ネタにしている期間）
+<for_writer> とは別に、<for_writer_crypto> と </for_writer_crypto> で囲んで、仮想通貨ネタの投稿を書くAIに渡す指示を書く。
+- 入れてよいのは、仮想通貨ネタにしても良い影響しかないものだけ: 文章の構成、1行目の作り方、締め方、言葉づかい、長さ、絵文字の使い方、同じテーマを繰り返さないこと、など
+- 入れないもの: FXやドル円・ゴールド・ナスダックを題材にする指示、FXのテーマ候補、扱う市場の優先順位、仮想通貨では当てはまるか分からない方針
+- 仮想通貨の投稿の反応のデータがあれば、それを優先して、仮想通貨の投稿で効いた書き方を入れる
+- 試してみることを入れる場合は、仮想通貨の投稿で試せるものだけにする
 """
 
 
@@ -196,6 +209,9 @@ def main():
         fixed_rules=FIXED_RULES, posts=format_posts(rows),
         long_term=long_term or "（なし）", previous=previous, previous_report=previous_report,
     )
+    crypto_only = json.loads(CONTENT_MODE_PATH.read_text(encoding="utf-8")).get("crypto_only")
+    if crypto_only:
+        prompt += CRYPTO_WRITER_INSTRUCTION
     analysis = run_analysis(prompt)
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -211,6 +227,19 @@ def main():
         print("insights.md を更新")
     else:
         print("::warning::分析結果に <for_writer> がなかったため、insights.md は更新しない")
+
+    if crypto_only:
+        mc = re.search(r"<for_writer_crypto>(.*?)</for_writer_crypto>", analysis, re.DOTALL)
+        if mc:
+            INSIGHTS_CRYPTO_PATH.write_text(
+                f"# 週次レビューからの改善方針（仮想通貨ネタの期間用・{week_label} の分析）\n\n"
+                "週次分析の改善方針のうち、仮想通貨ネタにしても良い影響しかない「構成・書き方」だけを抜き出したもの。\n\n"
+                f"{mc.group(1).strip()}\n",
+                encoding="utf-8",
+            )
+            print("insights_crypto.md を更新")
+        else:
+            print("::warning::分析結果に <for_writer_crypto> がなかったため、insights_crypto.md は更新しない")
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

@@ -30,6 +30,7 @@ JST = timezone(timedelta(hours=9))
 SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩", "nfp_followup": "米雇用統計の発表直後"}
 ROOT_DIR = Path(__file__).parent.parent
 INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
+INSIGHTS_CRYPTO_PATH = ROOT_DIR / "workflow" / "insights_crypto.md"
 POSTED_LOG = ROOT_DIR / "workflow" / "posted_log.jsonl"
 MAX_VERIFY_ATTEMPTS = 3
 
@@ -786,8 +787,10 @@ def build_generate_prompt(date_str: str, slot: str) -> str:
             "\n\n---\n\n## 直近7日の自動投稿（同じテーマ・同じ切り口・同じ1行目や締めの言い回しを使わない）\n\n"
             + recent
         )
-    if INSIGHTS_PATH.exists():
-        insights = INSIGHTS_PATH.read_text(encoding="utf-8")
+    # 仮想通貨ネタの期間は、構成・書き方だけを抜き出した方針を使う（FXのテーマ候補などを引き継がないため）
+    path = INSIGHTS_CRYPTO_PATH if is_crypto_mode(date_str) else INSIGHTS_PATH
+    if path.exists():
+        insights = path.read_text(encoding="utf-8")
         base += (
             "\n\n---\n\n## 先週の反応分析からの改善方針（毎週日曜に更新。上のルールと食い違う場合は上のルールを優先）\n\n"
             + insights
