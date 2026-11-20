@@ -45,14 +45,13 @@ FIXED_RULES = """\
 
 ANALYSIS_PROMPT = """\
 あなたはFXトレーダー「はじめ」さん（@hajime_cp）のX運用アナリストです。
-下のデータは、AIが書く自動投稿（毎日9時・18時）の直近30本だけです（X APIの節約のため、はじめさん本人の投稿は読み込んでいない）。
-30本はおよそ2週間分なので、各投稿の日時で先週の分とその前の週の分を分け、週ごとに比べて分析してください。
+下のデータは、先週1週間のこのアカウントの投稿です。AIが書く自動投稿（毎日9時・18時）と、はじめさん側が手動で投稿したものが混ざっていて、[自動]/[本人] で区別してある。
 先週（{start}〜{end} 日本時間）の投稿の反応を分析し、今週月曜からの自動投稿をどう改善するかをまとめてください。
 
 ## 自動投稿の固定ルール（変えられないので、これに反する提案はしない）
 {fixed_rules}
 
-## 自動投稿の直近30本（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
+## 先週の投稿（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
 {posts}
 
 ## 長期データ（直近の投稿全体の集計。テーマ別・時間帯別・曜日別）
@@ -68,7 +67,7 @@ ANALYSIS_PROMPT = """\
 データから言えることと推測をはっきり分け、件数が少ないものは言い過ぎない。数字は上のデータから引用する。
 
 ### 1. 先週の結果
-自動投稿の件数・平均表示回数・平均エンゲージ率（前の週のレポートがあれば比べる）。前回の改善方針を試した効果が見えるなら、それも。
+自動投稿と本人投稿それぞれの件数・平均表示回数・平均エンゲージ率（前の週のレポートがあれば比べる）。前回の改善方針を試した効果が見えるなら、それも。
 
 ### 2. 反応が良かった投稿と、伸びた理由
 上位3件程度。テーマ、1行目のつかみ、文章の構成、長さ、締め方、絵文字、投稿時間・曜日、その日の相場の話題性などから理由を考える。
@@ -104,11 +103,10 @@ def analysis_week(now: datetime) -> tuple[datetime, datetime]:
     return week_end - timedelta(days=7), week_end
 
 
-def load_recent_auto_post_ids(n: int) -> list[str]:
+def load_auto_post_ids() -> set[str]:
     if not POSTED_LOG.exists():
-        return []
-    ids = [str(json.loads(l)["id"]) for l in POSTED_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
-    return ids[-n:]
+        return set()
+    return {str(json.loads(l)["id"]) for l in POSTED_LOG.read_text(encoding="utf-8").splitlines() if l.strip()}
 
 
 def post_row(t, auto_ids: set[str], private: dict) -> dict:
@@ -165,13 +163,21 @@ def main():
         print(f"{week_label} の週次レビューは作成済みなので終了")
         return
 
-    # X APIのクレジットを節約するため、自動投稿の直近30本だけをIDで読み込む（本人の投稿・非公開指標は読まない）
-    recent_ids = load_recent_auto_post_ids(30)
+    # X APIのクレジットを節約するため、先週（月曜0時〜日曜23:59）の投稿だけを期間指定で読み込む（非公開指標は読まない）
     client = get_client()
-    resp = client.get_tweets(ids=recent_ids, tweet_fields=["public_metrics", "created_at", "text"], user_auth=True) if recent_ids else None
-    tweets = (resp.data or []) if resp else []
-    print(f"自動投稿 {len(tweets)} 本を読み込み")
-    auto_ids = set(recent_ids)
+    user_id = client.get_me(user_auth=True).data.id
+    tweets, token = [], None
+    while True:
+        resp = client.get_users_tweets(
+            id=user_id, start_time=start, end_time=end, max_results=100, pagination_token=token,
+            tweet_fields=["public_metrics", "created_at", "text"], exclude=["retweets", "replies"], user_auth=True,
+        )
+        tweets += resp.data or []
+        token = (resp.meta or {}).get("next_token")
+        if not token:
+            break
+    auto_ids = load_auto_post_ids()
+    print(f"先週の投稿 {len(tweets)} 本を読み込み（うち自動 {sum(str(t.id) in auto_ids for t in tweets)} 本）")
 
     rows = [post_row(t, auto_ids, {}) for t in tweets]
     rows.sort(key=lambda r: (r["engagement_rate"], r["impressions"]), reverse=True)
