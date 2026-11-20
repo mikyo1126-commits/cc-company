@@ -15,7 +15,6 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import tweepy
 
 sys.path.insert(0, str(Path(__file__).parent))
 from auto_post import JST, call_claude  # noqa: E402
@@ -46,13 +45,13 @@ FIXED_RULES = """\
 
 ANALYSIS_PROMPT = """\
 あなたはFXトレーダー「はじめ」さん（@hajime_cp）のX運用アナリストです。
-このアカウントは、はじめさん本人の投稿と、AIが書く自動投稿（毎日9時・18時）が混在しています。
+下のデータは、AIが書く自動投稿（毎日9時・18時）の直近14本だけです（X APIの節約のため、はじめさん本人の投稿は読み込んでいない）。
 先週（{start}〜{end} 日本時間）の投稿の反応を分析し、今週月曜からの自動投稿をどう改善するかをまとめてください。
 
 ## 自動投稿の固定ルール（変えられないので、これに反する提案はしない）
 {fixed_rules}
 
-## 先週の投稿（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
+## 自動投稿の直近14本（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
 {posts}
 
 ## 長期データ（直近の投稿全体の集計。テーマ別・時間帯別・曜日別）
@@ -68,7 +67,7 @@ ANALYSIS_PROMPT = """\
 データから言えることと推測をはっきり分け、件数が少ないものは言い過ぎない。数字は上のデータから引用する。
 
 ### 1. 先週の結果
-自動投稿と本人投稿それぞれの件数・平均表示回数・平均エンゲージ率。前回の改善方針を試した効果が見えるなら、それも。
+自動投稿の件数・平均表示回数・平均エンゲージ率（前の週のレポートがあれば比べる）。前回の改善方針を試した効果が見えるなら、それも。
 
 ### 2. 反応が良かった投稿と、伸びた理由
 上位3件程度。テーマ、1行目のつかみ、文章の構成、長さ、締め方、絵文字、投稿時間・曜日、その日の相場の話題性などから理由を考える。
@@ -104,27 +103,11 @@ def analysis_week(now: datetime) -> tuple[datetime, datetime]:
     return week_end - timedelta(days=7), week_end
 
 
-def load_auto_post_ids() -> set[str]:
+def load_recent_auto_post_ids(n: int) -> list[str]:
     if not POSTED_LOG.exists():
-        return set()
-    ids = set()
-    for line in POSTED_LOG.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            ids.add(str(json.loads(line)["id"]))
-    return ids
-
-
-def fetch_week_metrics(client, user_id, start: datetime, end: datetime) -> dict[str, dict]:
-    """プロフィールクリック等の非公開指標（自分の投稿・30日以内のみ取得可）。取れなければ空"""
-    try:
-        resp = client.get_users_tweets(
-            id=user_id, max_results=100, start_time=start, end_time=end,
-            tweet_fields=["non_public_metrics"], exclude=["retweets", "replies"], user_auth=True,
-        )
-        return {str(t.id): (t.non_public_metrics or {}) for t in (resp.data or [])}
-    except tweepy.TweepyException as e:
-        print(f"::warning::非公開指標は取得できなかったので、公開指標だけで分析します: {e}")
-        return {}
+        return []
+    ids = [str(json.loads(l)["id"]) for l in POSTED_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return ids[-n:]
 
 
 def post_row(t, auto_ids: set[str], private: dict) -> dict:
@@ -181,19 +164,15 @@ def main():
         print(f"{week_label} の週次レビューは作成済みなので終了")
         return
 
+    # X APIのクレジットを節約するため、自動投稿の直近14本だけをIDで読み込む（本人の投稿・非公開指標は読まない）
+    recent_ids = load_recent_auto_post_ids(14)
     client = get_client()
-    user_id = client.get_me(user_auth=True).data.id
-    resp = client.get_users_tweets(
-        id=user_id, max_results=100,
-        tweet_fields=["public_metrics", "created_at", "text"],
-        exclude=["retweets", "replies"], user_auth=True,
-    )
-    tweets = resp.data or []
-    week_tweets = [t for t in tweets if start <= t.created_at.astimezone(JST) < end]
-    private = fetch_week_metrics(client, user_id, start, end)
-    auto_ids = load_auto_post_ids()
+    resp = client.get_tweets(ids=recent_ids, tweet_fields=["public_metrics", "created_at", "text"], user_auth=True) if recent_ids else None
+    tweets = (resp.data or []) if resp else []
+    print(f"自動投稿 {len(tweets)} 本を読み込み")
+    auto_ids = set(recent_ids)
 
-    rows = [post_row(t, auto_ids, private.get(str(t.id), {})) for t in week_tweets]
+    rows = [post_row(t, auto_ids, {}) for t in tweets]
     rows.sort(key=lambda r: (r["engagement_rate"], r["impressions"]), reverse=True)
 
     long_term_all = generate_md(
