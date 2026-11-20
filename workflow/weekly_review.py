@@ -45,13 +45,14 @@ FIXED_RULES = """\
 
 ANALYSIS_PROMPT = """\
 あなたはFXトレーダー「はじめ」さん（@hajime_cp）のX運用アナリストです。
-下のデータは、AIが書く自動投稿（毎日9時・18時）の直近14本だけです（X APIの節約のため、はじめさん本人の投稿は読み込んでいない）。
+下のデータは、AIが書く自動投稿（毎日9時・18時）の直近30本だけです（X APIの節約のため、はじめさん本人の投稿は読み込んでいない）。
+30本はおよそ2週間分なので、各投稿の日時で先週の分とその前の週の分を分け、週ごとに比べて分析してください。
 先週（{start}〜{end} 日本時間）の投稿の反応を分析し、今週月曜からの自動投稿をどう改善するかをまとめてください。
 
 ## 自動投稿の固定ルール（変えられないので、これに反する提案はしない）
 {fixed_rules}
 
-## 自動投稿の直近14本（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
+## 自動投稿の直近30本（反応の良い順。エンゲージ率 = (いいね+RT+返信+引用+ブックマーク) / 表示回数）
 {posts}
 
 ## 長期データ（直近の投稿全体の集計。テーマ別・時間帯別・曜日別）
@@ -164,8 +165,8 @@ def main():
         print(f"{week_label} の週次レビューは作成済みなので終了")
         return
 
-    # X APIのクレジットを節約するため、自動投稿の直近14本だけをIDで読み込む（本人の投稿・非公開指標は読まない）
-    recent_ids = load_recent_auto_post_ids(14)
+    # X APIのクレジットを節約するため、自動投稿の直近30本だけをIDで読み込む（本人の投稿・非公開指標は読まない）
+    recent_ids = load_recent_auto_post_ids(30)
     client = get_client()
     resp = client.get_tweets(ids=recent_ids, tweet_fields=["public_metrics", "created_at", "text"], user_auth=True) if recent_ids else None
     tweets = (resp.data or []) if resp else []
