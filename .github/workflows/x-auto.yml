@@ -1,9 +1,10 @@
 name: "X自動投稿"
 
-# 投稿時刻: 毎日 朝 9:00 JST / 夜 18:00 JST
+# 投稿時刻: 毎日 9:00 / 12:00 / 15:00 / 18:00 JST
 #
 # GitHubの予約実行は数時間〜半日遅れ、遅れ方も一定しない。そこで1日中ほぼ1時間半おきに起動を仕掛け、
-# 届いた起動が「次の投稿時刻の5時間前〜2時間後」なら、その投稿時刻の分を担当する（朝用・夜用を分けない）。
+# 届いた起動は、「5時間前〜2時間後」の範囲に入っている投稿時刻のうち、今日まだ投稿していない一番早いものを担当する。
+# 投稿済みかどうかは workflow/posted_log.jsonl（投稿のたびにコミットされる記録）で判断する。
 # 生成・検証を済ませてから投稿時刻ちょうどまで待って投稿する。それ以外の時間・投稿済みの回は数秒で終了する。
 on:
   schedule:
@@ -33,6 +34,7 @@ on:
         options:
           - morning
           - noon
+          - afternoon
           - evening
       post_at:
         description: '投稿時刻 HH:MM（日本時間）。空欄ならすぐ投稿'
@@ -55,6 +57,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: decide
         id: decide
         run: |
@@ -71,15 +75,19 @@ jobs:
           fi
           NOW=$(date +%s)
           SLOT=""
-          for CAND in "morning 09:00" "evening 18:00"; do
+          for CAND in "morning 09:00" "noon 12:00" "afternoon 15:00" "evening 18:00"; do
             set -- $CAND
             T=$(TZ=Asia/Tokyo date -d "$DATE $2" +%s)
             if [ "$NOW" -ge $((T - 18000)) ] && [ "$NOW" -le $((T + 7200)) ]; then
+              if grep -q "\"posted_at\": \"$DATE.*\"slot\": \"$1\"" workflow/posted_log.jsonl 2>/dev/null; then
+                continue
+              fi
               SLOT=$1; TARGET_HM=$2; TARGET=$T
+              break
             fi
           done
           if [ -z "$SLOT" ]; then
-            echo "::notice::次の投稿時刻（9:00/18:00）の5時間前〜2時間後ではないので、この回は何もしない"
+            echo "::notice::担当できる投稿時刻（5時間前〜2時間後で、今日まだ投稿していないもの）がないので、この回は何もしない"
             echo "go=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -93,7 +101,7 @@ jobs:
 
       - name: check-already-posted
         id: marker
-        if: steps.decide.outputs.go == 'true' && env.SLOT != 'noon'
+        if: steps.decide.outputs.go == 'true' && env.SLOT != ''
         uses: actions/cache/restore@v4
         with:
           path: .posted-marker
@@ -111,10 +119,6 @@ jobs:
           else
             echo "run=true" >> $GITHUB_OUTPUT
           fi
-
-      - name: checkout
-        if: steps.gate.outputs.run == 'true'
-        uses: actions/checkout@v4
 
       - name: setup-python
         if: steps.gate.outputs.run == 'true'
@@ -162,7 +166,7 @@ jobs:
           echo "posted" > .posted-marker
 
       - name: mark-posted
-        if: steps.gate.outputs.run == 'true' && env.SLOT != 'noon'
+        if: steps.gate.outputs.run == 'true' && env.SLOT != ''
         uses: actions/cache/save@v4
         with:
           path: .posted-marker

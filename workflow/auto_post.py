@@ -27,7 +27,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
-SLOT_LABELS = {"morning": "朝", "noon": "昼", "evening": "晩", "nfp_followup": "米雇用統計の発表直後"}
+SLOT_LABELS = {"morning": "朝", "noon": "昼", "afternoon": "午後", "evening": "晩", "nfp_followup": "米雇用統計の発表直後"}
 ROOT_DIR = Path(__file__).parent.parent
 INSIGHTS_PATH = ROOT_DIR / "workflow" / "insights.md"
 INSIGHTS_CRYPTO_PATH = ROOT_DIR / "workflow" / "insights_crypto.md"
@@ -158,7 +158,8 @@ GENERATE_PROMPT = """\
 ### ❺ スロット別の自然なトーン
 
 - 朝（9時ごろ投稿）: 「昨夜のNY時間の動きと、今日どこに注目するか」を語る雰囲気
-- 昼: 「午前の動きを見て感じたこと」を会話するような雰囲気
+- 昼（12時ごろ投稿）: 「午前の動きを見て感じたこと」を会話するような雰囲気
+- 午後（15時ごろ投稿）: 「知っておくと得すること」を後輩に教えるような雰囲気
 - 晩（18時ごろ投稿）: 「今日の東京時間の振り返りと、今夜の欧州・NY時間に向けてどこを見るか」を語る雰囲気
 
 ---
@@ -330,7 +331,7 @@ CRYPTO_NORMAL_POLICY = """ビットコイン・仮想通貨は扱わない（は
 CRYPTO_CRASH_POLICY = """ビットコイン・仮想通貨は、下の【仮想通貨の暴落中の特別ルール】がある投稿でだけ扱う。それ以外の投稿では扱わない。"""
 
 CRYPTO_CRASH_HEADER = """【仮想通貨ネタだけを投稿する期間の特別ルール】
-はじめさん側の指示で、今は朝・夜の投稿をすべて仮想通貨ネタにする（ドル円・ゴールド・ナスダックが主役の投稿にはしない）。
+はじめさん側の指示で、今は毎日の投稿（9時・12時・15時・18時）をすべて仮想通貨ネタにする（ドル円・ゴールド・ナスダックが主役の投稿にはしない）。
 ビットコインだけでなく、イーサリアム・リップルなど、その時に動きや話題が大きい通貨から選ぶ。毎回ビットコインにしない。
 まずWebSearchで、仮想通貨の今の値動きとニュースを2つ以上のソースで確認する。
 下落が続いていれば暴落の話として、落ち着いていれば今の動き（反発・横ばいなど）に合わせて書く。実際に暴落していない時に「暴落」と書かない。
@@ -352,6 +353,8 @@ CRYPTO_ANGLES = {
     "weekday_evening": "仮想通貨で初心者がやりがちな失敗（下がったから安いとナンピンする、ロットを上げたまま持ち続けてロスカットになる、SNSの「もう底」の声に飛びつく等）を、下の【失敗談】の形（「以前の僕がやった失敗談」の見出し、数字は使わない）で書く",
     "weekend": "今週の仮想通貨の動きが、なぜ起きたか・ドル円やゴールドやナスダックなど他の市場とどうつながったかの切り口で書く",
     "saturday_morning": "今週の仮想通貨のまとめ。ビットコイン・イーサリアム・リップルなどについて、それぞれ「何があって、どう動いたか」を1〜2行ずつ普段の言葉で書く",
+    "noon": "午前中の仮想通貨の動きや話題になっているニュース（2つ以上のソースで確認できたものだけ）を、何が起きたか・なぜかの順に普段の言葉で書く。朝の投稿と同じ話題・同じ切り口にはしない",
+    "afternoon": "仮想通貨を始めたばかりの人向けの基礎（値動きの大きさとの付き合い方、ロットの決め方、損切りの置き方、送金や注文で間違えやすい所など）を1つに絞って書く。取引所や業者の名前は出さない。締めはチェックリストか、すぐ使えるルール1行",
     "sunday_evening": "来週の仮想通貨に関係する注目イベント（アメリカの金利の発表、仮想通貨の規制のニュースなど）を、2つ以上のソースで日時を確かめて「〜なら〜そうだ」の場合分けで書く",
 }
 
@@ -363,7 +366,9 @@ def theme_rule_for(date_str: str, slot: str) -> str:
     weekday = datetime.strptime(date_str, "%Y-%m-%d").weekday()
     if is_crypto_mode(date_str):
         # 暴落中は朝・夜の投稿をすべて仮想通貨にする（はじめさん側の指示）
-        if weekday < 5 and slot in ("morning", "evening"):
+        if slot in ("noon", "afternoon"):
+            angle = CRYPTO_ANGLES[slot]
+        elif weekday < 5 and slot in ("morning", "evening"):
             angle = CRYPTO_ANGLES["weekday_" + slot]
         elif (weekday, slot) == (5, "morning"):
             angle = CRYPTO_ANGLES["saturday_morning"]
@@ -598,8 +603,8 @@ def find_problems(post: str, weekend: bool | None = None, story: bool | None = N
     mentions_crypto = re.search(r"ビットコイン|仮想通貨|暗号資産|イーサリアム|リップル|ソラナ|アルトコイン|ビトコ|BTC|ETH|XRP|SOL", post)
     if not crypto_ok and mentions_crypto:
         problems.append("ビットコイン・仮想通貨（本人の投稿と重なるため扱わない）")
-    if crypto_ok and RUN_CONTEXT.get("slot") in ("morning", "evening") and not mentions_crypto:
-        problems.append("仮想通貨ネタになっていない（今は朝・夜とも仮想通貨ネタだけ。通貨名か「仮想通貨」を本文に入れ、仮想通貨の話として書き直す）")
+    if crypto_ok and RUN_CONTEXT.get("slot") in ("morning", "noon", "afternoon", "evening") and not mentions_crypto:
+        problems.append("仮想通貨ネタになっていない（今は毎日の投稿はすべて仮想通貨ネタだけ。通貨名か「仮想通貨」を本文に入れ、仮想通貨の話として書き直す）")
     for word in re.findall(r"[A-Za-z]+", post):
         if crypto_ok and word.upper() in ("BTC", "ETH", "XRP", "SOL"):
             continue
