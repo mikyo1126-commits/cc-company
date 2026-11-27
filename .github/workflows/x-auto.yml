@@ -1,6 +1,7 @@
 name: "X自動投稿"
 
-# 投稿時刻: 毎日 9:00 / 12:00 / 15:00 / 18:00 JST
+# 投稿時刻: 毎日 8時台 / 12時台 / 15時台 / 18時台 JST。本人が手で投稿したように見せるため、
+# ちょうどの時刻ではなく、日付と枠から決まる3〜17分後（例: 8:07、12:13）に投稿する
 #
 # GitHubの予約実行は数時間〜半日遅れ、遅れ方も一定しない。そこで1日中ほぼ1時間半おきに起動を仕掛け、
 # 届いた起動は、「5時間前〜2時間後」の範囲に入っている投稿時刻のうち、今日まだ投稿していない一番早いものを担当する。
@@ -75,7 +76,7 @@ jobs:
           fi
           NOW=$(date +%s)
           SLOT=""
-          for CAND in "morning 09:00" "noon 12:00" "afternoon 15:00" "evening 18:00"; do
+          for CAND in "morning 08:00" "noon 12:00" "afternoon 15:00" "evening 18:00"; do
             set -- $CAND
             T=$(TZ=Asia/Tokyo date -d "$DATE $2" +%s)
             if [ "$NOW" -ge $((T - 18000)) ] && [ "$NOW" -le $((T + 7200)) ]; then
@@ -96,7 +97,11 @@ jobs:
           if [ "$NOW" -gt $((TARGET + 1800)) ]; then
             echo "::warning::$SLOT: 目標 $TARGET_HM より遅れて起動したので、すぐに投稿する"
           fi
-          echo "POST_AT=$TARGET" >> $GITHUB_ENV
+          # 日付と枠から決まる3〜17分のずらし（同じ日の同じ枠なら、どの起動でも同じ時刻になる）
+          JITTER_MIN=$(python3 -c "import hashlib,sys; print(int(hashlib.md5(sys.argv[1].encode()).hexdigest()[:4],16) % 15 + 3)" "$DATE-$SLOT")
+          POST_AT=$((TARGET + JITTER_MIN * 60))
+          echo "::notice::$SLOT は $(TZ=Asia/Tokyo date -d @$POST_AT +%H:%M) JST に投稿する"
+          echo "POST_AT=$POST_AT" >> $GITHUB_ENV
           echo "go=true" >> $GITHUB_OUTPUT
 
       - name: check-already-posted
